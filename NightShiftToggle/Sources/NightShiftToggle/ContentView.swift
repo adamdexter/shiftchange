@@ -357,7 +357,7 @@ struct AppPickerSheet: View {
                             Spacer()
                             Text("built-in")
                                 .font(.caption)
-                                .foregroundColor(.tertiary)
+                                .foregroundStyle(.tertiary)
                         }
                     }
                 }
