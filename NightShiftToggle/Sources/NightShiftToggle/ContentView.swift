@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject var excludeList: ExcludeListManager
@@ -88,15 +89,10 @@ struct ContentView: View {
 
                 Spacer()
 
-                Button(action: browseForApp) {
-                    Image(systemName: "doc.badge.plus")
-                }
-                .help("Browse for an .app file")
-
                 Button(action: { showingAppPicker = true }) {
                     Image(systemName: "plus")
                 }
-                .help("Add from application list")
+                .help("Add application")
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
@@ -112,7 +108,7 @@ struct ContentView: View {
                     Text("No apps in exclude list")
                         .font(.headline)
                         .foregroundColor(.secondary)
-                    Text("Click + to browse apps, or the file icon to locate an .app directly")
+                    Text("Click + to add apps to the exclude list")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     Spacer()
@@ -132,30 +128,6 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Browse for .app via Finder
-
-    private func browseForApp() {
-        let panel = NSOpenPanel()
-        panel.title = "Select an Application"
-        panel.allowedContentTypes = [.applicationBundle]
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.directoryURL = URL(fileURLWithPath: "/Applications")
-
-        guard panel.runModal() == .OK else { return }
-
-        for url in panel.urls {
-            if let app = InstalledAppsFinder.appInfo(from: url) {
-                excludeList.add(bundleID: app.bundleID)
-                // Add to installed apps list if not already there
-                if !installedApps.contains(where: { $0.bundleID == app.bundleID }) {
-                    installedApps.append(app)
-                    installedApps.sort()
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Excluded App Row
@@ -242,7 +214,7 @@ struct AppPickerSheet: View {
             // Tab picker: Applications / Search Folders
             Picker("", selection: $selectedTab) {
                 Text("Applications").tag(0)
-                Text("Search Folders").tag(1)
+                Text("Folders to Search").tag(1)
             }
             .pickerStyle(.segmented)
             .padding(.horizontal)
@@ -299,28 +271,47 @@ struct AppPickerSheet: View {
                     Spacer()
                 }
             } else {
-                List(filteredApps) { app in
-                    HStack {
-                        Image(nsImage: InstalledAppsFinder.icon(for: app))
-                            .resizable()
-                            .frame(width: 24, height: 24)
-
-                        VStack(alignment: .leading) {
-                            Text(app.name)
-                                .fontWeight(.medium)
-                            Text(app.bundleID)
-                                .font(.caption)
+                List {
+                    // Manual add option at top
+                    Button(action: browseForApp) {
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .frame(width: 24, height: 24)
                                 .foregroundColor(.secondary)
-                        }
 
-                        Spacer()
+                            Text("Manually Add Application")
+                                .fontWeight(.medium)
 
-                        Button("Add") {
-                            excludeList.add(bundleID: app.bundleID)
+                            Spacer()
                         }
-                        .buttonStyle(.bordered)
+                        .padding(.vertical, 2)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.vertical, 2)
+                    .buttonStyle(.plain)
+
+                    ForEach(filteredApps) { app in
+                        HStack {
+                            Image(nsImage: InstalledAppsFinder.icon(for: app))
+                                .resizable()
+                                .frame(width: 24, height: 24)
+
+                            VStack(alignment: .leading) {
+                                Text(app.name)
+                                    .fontWeight(.medium)
+                                Text(app.bundleID)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button("Add") {
+                                excludeList.add(bundleID: app.bundleID)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
             }
         }
@@ -384,6 +375,25 @@ struct AppPickerSheet: View {
                 }
             }
         }
+    }
+
+    private func browseForApp() {
+        let panel = NSOpenPanel()
+        panel.title = "Select an Application"
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+
+        guard panel.runModal() == .OK else { return }
+
+        for url in panel.urls {
+            if let app = InstalledAppsFinder.appInfo(from: url) {
+                excludeList.add(bundleID: app.bundleID)
+            }
+        }
+        onAppsChanged()
     }
 
     private func addFolder() {
