@@ -212,30 +212,58 @@ fi
 
 echo "   Mounted at: ${MOUNT_DIR}"
 
+# Give Finder time to notice the new volume
+sleep 2
+
 # Use AppleScript to configure the Finder window appearance
-osascript << ASCRIPT
-tell application "Finder"
-    tell disk "${APP_NAME}"
-        open
-        set current view of container window to icon view
-        set toolbar visible of container window to false
-        set statusbar visible of container window to false
-        set the bounds of container window to {100, 100, 760, 500}
-        set viewOptions to the icon view options of container window
-        set arrangement of viewOptions to not arranged
-        set icon size of viewOptions to 80
-        set text size of viewOptions to 13
-        set background picture of viewOptions to file ".background:background.png"
-        set position of item "${APP_NAME}.app" of container window to {180, 190}
-        set position of item "Applications" of container window to {480, 190}
-        close
-        open
-        update without registering applications
-        delay 1
-        close
-    end tell
-end tell
+# Retry up to 3 times since Finder may not see the disk immediately
+for attempt in 1 2 3; do
+    if osascript << ASCRIPT
+        tell application "Finder"
+            -- Wait for disk to appear
+            set maxWait to 10
+            set diskFound to false
+            repeat maxWait times
+                try
+                    set diskFound to exists disk "${APP_NAME}"
+                end try
+                if diskFound then exit repeat
+                delay 1
+            end repeat
+
+            if not diskFound then
+                error "Disk ${APP_NAME} not found after waiting"
+            end if
+
+            tell disk "${APP_NAME}"
+                open
+                set current view of container window to icon view
+                set toolbar visible of container window to false
+                set statusbar visible of container window to false
+                set the bounds of container window to {100, 100, 760, 500}
+                set viewOptions to the icon view options of container window
+                set arrangement of viewOptions to not arranged
+                set icon size of viewOptions to 80
+                set text size of viewOptions to 13
+                set background picture of viewOptions to file ".background:background.png"
+                set position of item "${APP_NAME}.app" of container window to {180, 190}
+                set position of item "Applications" of container window to {480, 190}
+                close
+                open
+                update without registering applications
+                delay 1
+                close
+            end tell
+        end tell
 ASCRIPT
+    then
+        echo "   Finder window configured."
+        break
+    else
+        echo "   Attempt ${attempt} failed, retrying..."
+        sleep 2
+    fi
+done
 
 # Set volume icon
 if [ -f "${APP_BUNDLE}/Contents/Resources/AppIcon.icns" ]; then
