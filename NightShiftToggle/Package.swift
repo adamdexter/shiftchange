@@ -16,7 +16,10 @@ let package = Package(
         .executableTarget(
             name: "NightShiftToggle",
             dependencies: ["CBlueLightBridge"],
-            path: "Sources/NightShiftToggle"
+            path: "Sources/NightShiftToggle",
+            resources: [
+                .process("Resources")
+            ]
         ),
     ]
 )
