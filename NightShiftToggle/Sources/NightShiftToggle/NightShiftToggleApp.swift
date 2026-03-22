@@ -7,11 +7,10 @@ struct NightShiftToggleApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // Settings window opened from menu bar
+        // We manage the settings window manually via AppDelegate,
+        // but SwiftUI requires at least one Scene.
         Settings {
-            ContentView()
-                .environmentObject(appDelegate.excludeList)
-                .environmentObject(appDelegate.focusMonitor)
+            EmptyView()
         }
     }
 }
@@ -24,17 +23,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     private var statusItem: NSStatusItem!
     private var statusMenu: NSMenu!
+    private var settingsWindow: NSWindow?
 
     // Menu items that need updating
     private var statusMenuItem: NSMenuItem!
     private var activeAppMenuItem: NSMenuItem!
     private var launchAtLoginMenuItem: NSMenuItem!
 
+    private static let hasLaunchedKey = "hasLaunchedBefore"
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Run as accessory (menu bar only, no Dock icon)
         NSApplication.shared.setActivationPolicy(.accessory)
 
-        // Set the app icon (for Settings window title bar, About, etc.)
+        // Set the app icon (for window title bar, About, etc.)
         if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             let size: CGFloat = 1024
@@ -58,6 +60,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         // Set up menu bar
         setupStatusItem()
+
+        // Show settings on first launch
+        if !UserDefaults.standard.bool(forKey: Self.hasLaunchedKey) {
+            UserDefaults.standard.set(true, forKey: Self.hasLaunchedKey)
+            DispatchQueue.main.async { [weak self] in
+                self?.openSettings()
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -139,39 +149,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         button.image = image
     }
 
-    // MARK: - Actions
+    // MARK: - Settings Window
 
-    @objc private func openSettings() {
-        // Show the app temporarily so the settings window can appear
+    @objc func openSettings() {
+        // If window already exists, just bring it forward
+        if let window = settingsWindow, window.isVisible {
+            window.makeKeyAndOrderFront(nil)
+            NSApplication.shared.setActivationPolicy(.regular)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let contentView = ContentView()
+            .environmentObject(excludeList)
+            .environmentObject(focusMonitor)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 450),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "ShiftChange"
+        window.contentView = NSHostingView(rootView: contentView)
+        window.center()
+        window.setFrameAutosaveName("SettingsWindow")
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+
+        self.settingsWindow = window
+
+        // Show in Dock while window is open
         NSApplication.shared.setActivationPolicy(.regular)
+        window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
-
-        // Open the Settings window
-        if #available(macOS 14.0, *) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } else {
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        }
-
-        // Hide from Dock again when all windows close
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.watchForWindowClose()
-        }
-    }
-
-    private func watchForWindowClose() {
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                let visibleWindows = NSApplication.shared.windows.filter { $0.isVisible && $0.level == .normal }
-                if visibleWindows.isEmpty {
-                    NSApplication.shared.setActivationPolicy(.accessory)
-                }
-            }
-        }
     }
 
     @objc private func toggleLaunchAtLogin() {
@@ -205,6 +216,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             } catch {
                 print("Failed to \(enabled ? "enable" : "disable") launch at login: \(error)")
             }
+        }
+    }
+}
+
+// MARK: - Window Delegate
+
+extension AppDelegate: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
+        // Hide from Dock when settings window closes
+        DispatchQueue.main.async {
+            NSApplication.shared.setActivationPolicy(.accessory)
         }
     }
 }
