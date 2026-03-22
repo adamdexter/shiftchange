@@ -31,6 +31,7 @@ struct ContentView: View {
         }
     }
 
+
     private func reloadApps() {
         DispatchQueue.global(qos: .userInitiated).async {
             let apps = InstalledAppsFinder.findAll(extraPaths: excludeList.additionalAppFolders)
