@@ -15,20 +15,24 @@ struct AppInfo: Identifiable, Hashable, Comparable {
 
 /// Discovers installed applications on the system.
 enum InstalledAppsFinder {
-    /// Scans /Applications and ~/Applications for .app bundles.
-    static func findAll() -> [AppInfo] {
+    /// Default search paths that are always scanned.
+    static let defaultSearchPaths = [
+        "/Applications",
+        "/System/Applications",
+        NSHomeDirectory() + "/Applications",
+    ]
+
+    /// Scans default paths + any additional custom paths for .app bundles.
+    static func findAll(extraPaths: [String] = []) -> [AppInfo] {
         var apps: [AppInfo] = []
         var seenBundleIDs = Set<String>()
 
-        let searchPaths = [
-            "/Applications",
-            "/System/Applications",
-            NSHomeDirectory() + "/Applications",
-        ]
-
+        let allPaths = defaultSearchPaths + extraPaths
         let fileManager = FileManager.default
 
-        for basePath in searchPaths {
+        for basePath in allPaths {
+            guard fileManager.fileExists(atPath: basePath) else { continue }
+
             guard let enumerator = fileManager.enumerator(
                 at: URL(fileURLWithPath: basePath),
                 includingPropertiesForKeys: [.isDirectoryKey],
@@ -41,21 +45,27 @@ enum InstalledAppsFinder {
                 // Don't recurse into .app bundles
                 enumerator.skipDescendants()
 
-                guard let bundle = Bundle(url: url),
-                      let bundleID = bundle.bundleIdentifier else { continue }
-
-                guard !seenBundleIDs.contains(bundleID) else { continue }
-                seenBundleIDs.insert(bundleID)
-
-                let name = bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
-                    ?? bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
-                    ?? url.deletingPathExtension().lastPathComponent
-
-                apps.append(AppInfo(name: name, bundleID: bundleID, bundleURL: url))
+                if let app = appInfo(from: url), !seenBundleIDs.contains(app.bundleID) {
+                    seenBundleIDs.insert(app.bundleID)
+                    apps.append(app)
+                }
             }
         }
 
         return apps.sorted()
+    }
+
+    /// Creates an AppInfo from a .app bundle URL, or nil if invalid.
+    static func appInfo(from url: URL) -> AppInfo? {
+        guard url.pathExtension == "app",
+              let bundle = Bundle(url: url),
+              let bundleID = bundle.bundleIdentifier else { return nil }
+
+        let name = bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? url.deletingPathExtension().lastPathComponent
+
+        return AppInfo(name: name, bundleID: bundleID, bundleURL: url)
     }
 
     /// Gets the icon for an app.

@@ -10,32 +10,32 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Status bar
             statusSection
                 .padding()
                 .background(Color(nsColor: .controlBackgroundColor))
 
             Divider()
 
-            // Exclude list
             excludeListSection
         }
-        .frame(minWidth: 480, minHeight: 400)
-        .onAppear {
-            // Load installed apps in background
-            DispatchQueue.global(qos: .userInitiated).async {
-                let apps = InstalledAppsFinder.findAll()
-                DispatchQueue.main.async {
-                    self.installedApps = apps
-                }
-            }
-        }
+        .frame(minWidth: 520, minHeight: 450)
+        .onAppear { reloadApps() }
         .sheet(isPresented: $showingAppPicker) {
             AppPickerSheet(
                 installedApps: installedApps,
                 excludeList: excludeList,
-                isPresented: $showingAppPicker
+                isPresented: $showingAppPicker,
+                onAppsChanged: { reloadApps() }
             )
+        }
+    }
+
+    private func reloadApps() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let apps = InstalledAppsFinder.findAll(extraPaths: excludeList.additionalAppFolders)
+            DispatchQueue.main.async {
+                self.installedApps = apps
+            }
         }
     }
 
@@ -82,16 +82,21 @@ struct ContentView: View {
 
                 Spacer()
 
-                Text("Night Shift will be disabled when these apps are in focus")
+                Text("Night Shift disabled when these apps are in focus")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
                 Spacer()
 
+                Button(action: browseForApp) {
+                    Image(systemName: "doc.badge.plus")
+                }
+                .help("Browse for an .app file")
+
                 Button(action: { showingAppPicker = true }) {
                     Image(systemName: "plus")
                 }
-                .help("Add application")
+                .help("Add from application list")
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
@@ -107,7 +112,7 @@ struct ContentView: View {
                     Text("No apps in exclude list")
                         .font(.headline)
                         .foregroundColor(.secondary)
-                    Text("Click + to add apps that should disable Night Shift when in focus")
+                    Text("Click + to browse apps, or the file icon to locate an .app directly")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     Spacer()
@@ -122,6 +127,31 @@ struct ContentView: View {
                             onRemove: { excludeList.remove(bundleID: bundleID) }
                         )
                     }
+                }
+            }
+        }
+    }
+
+    // MARK: - Browse for .app via Finder
+
+    private func browseForApp() {
+        let panel = NSOpenPanel()
+        panel.title = "Select an Application"
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+
+        guard panel.runModal() == .OK else { return }
+
+        for url in panel.urls {
+            if let app = InstalledAppsFinder.appInfo(from: url) {
+                excludeList.add(bundleID: app.bundleID)
+                // Add to installed apps list if not already there
+                if !installedApps.contains(where: { $0.bundleID == app.bundleID }) {
+                    installedApps.append(app)
+                    installedApps.sort()
                 }
             }
         }
@@ -178,8 +208,10 @@ struct AppPickerSheet: View {
     let installedApps: [AppInfo]
     @ObservedObject var excludeList: ExcludeListManager
     @Binding var isPresented: Bool
+    var onAppsChanged: () -> Void
 
     @State private var searchText = ""
+    @State private var selectedTab = 0
 
     private var filteredApps: [AppInfo] {
         let available = installedApps.filter { !excludeList.contains(bundleID: $0.bundleID) }
@@ -194,6 +226,7 @@ struct AppPickerSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Header
             HStack {
                 Text("Add Application")
                     .font(.title3)
@@ -206,6 +239,30 @@ struct AppPickerSheet: View {
 
             Divider()
 
+            // Tab picker: Applications / Search Folders
+            Picker("", selection: $selectedTab) {
+                Text("Applications").tag(0)
+                Text("Search Folders").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            if selectedTab == 0 {
+                appListTab
+            } else {
+                foldersTab
+            }
+        }
+        .frame(width: 520, height: 480)
+    }
+
+    // MARK: - Applications Tab
+
+    private var appListTab: some View {
+        VStack(spacing: 0) {
             // Search field
             HStack {
                 Image(systemName: "magnifyingglass")
@@ -234,6 +291,13 @@ struct AppPickerSheet: View {
                     ProgressView("Loading applications...")
                     Spacer()
                 }
+            } else if filteredApps.isEmpty {
+                VStack {
+                    Spacer()
+                    Text("No matching applications")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
             } else {
                 List(filteredApps) { app in
                     HStack {
@@ -260,6 +324,78 @@ struct AppPickerSheet: View {
                 }
             }
         }
-        .frame(width: 500, height: 450)
+    }
+
+    // MARK: - Search Folders Tab
+
+    private var foldersTab: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Additional application folders are scanned for .app bundles.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button(action: addFolder) {
+                    Label("Add Folder", systemImage: "folder.badge.plus")
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+
+            Divider()
+
+            // Default paths (non-removable)
+            List {
+                Section("Default Paths") {
+                    ForEach(InstalledAppsFinder.defaultSearchPaths, id: \.self) { path in
+                        HStack {
+                            Image(systemName: "folder")
+                                .foregroundColor(.secondary)
+                            Text(path)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("built-in")
+                                .font(.caption)
+                                .foregroundColor(.tertiary)
+                        }
+                    }
+                }
+
+                if !excludeList.additionalAppFolders.isEmpty {
+                    Section("Custom Paths") {
+                        ForEach(excludeList.additionalAppFolders, id: \.self) { path in
+                            HStack {
+                                Image(systemName: "folder.fill")
+                                    .foregroundColor(.accentColor)
+                                Text(path)
+                                Spacer()
+                                Button(action: {
+                                    excludeList.removeFolder(path)
+                                    onAppsChanged()
+                                }) {
+                                    Image(systemName: "minus.circle.fill")
+                                        .foregroundColor(.red)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func addFolder() {
+        let panel = NSOpenPanel()
+        panel.title = "Select Applications Folder"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        excludeList.addFolder(url.path)
+        onAppsChanged()
     }
 }
