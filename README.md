@@ -83,7 +83,7 @@ Requires **macOS 13+** and **Swift 5.9+**.
 
 ```bash
 git clone https://github.com/adamdexter/shiftchange.git
-cd shiftchange/NightShiftToggle
+cd shiftchange/ShiftChange
 swift build -c release
 ```
 
