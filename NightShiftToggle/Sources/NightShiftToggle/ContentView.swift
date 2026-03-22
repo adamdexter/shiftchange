@@ -257,25 +257,22 @@ struct AppPickerSheet: View {
 
             Divider()
 
-            List {
-                // Manual add option — always available
-                Button(action: browseForApp) {
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .frame(width: 24, height: 24)
-                            .foregroundColor(.secondary)
+            Button(action: browseForApp) {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .frame(width: 24, height: 24)
+                        .foregroundColor(.secondary)
 
-                        Text("Manually Add Application")
-                            .fontWeight(.medium)
+                    Text("Manually Add Application")
+                        .fontWeight(.medium)
 
-                        Spacer()
-                    }
-                    .padding(.vertical, 2)
-                    .contentShape(Rectangle())
+                    Spacer()
                 }
-                .buttonStyle(.plain)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
             }
-            .frame(maxHeight: 40)
+            .buttonStyle(.plain)
 
             Divider()
 
