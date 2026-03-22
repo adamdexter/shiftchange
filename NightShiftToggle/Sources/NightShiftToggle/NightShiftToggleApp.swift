@@ -6,7 +6,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Make the app a regular app so it appears in Cmd+Tab and can become key window
         NSApplication.shared.setActivationPolicy(.regular)
         // Set the app icon
-        if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "png"),
+        if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = icon
         }
