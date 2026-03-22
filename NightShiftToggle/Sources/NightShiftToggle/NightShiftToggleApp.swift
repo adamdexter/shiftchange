@@ -58,7 +58,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             self?.updateMenuStatus()
         }
 
-        // Set up menu bar
+        // Set up main menu (overrides default app name in menu bar)
+        setupMainMenu()
+
+        // Set up menu bar status item
         setupStatusItem()
 
         // Show settings on first launch OR if exclude list is empty
@@ -82,6 +85,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             alert.addButton(withTitle: "Minimize to Menu Bar")
             alert.addButton(withTitle: "Quit")
             alert.alertStyle = .informational
+
+            // Use a thinking face emoji as the alert icon
+            let emojiIcon = NSImage(size: NSSize(width: 64, height: 64))
+            emojiIcon.lockFocus()
+            let emojiStr = "🤔" as NSString
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 52)
+            ]
+            let emojiSize = emojiStr.size(withAttributes: attrs)
+            let point = NSPoint(
+                x: (64 - emojiSize.width) / 2,
+                y: (64 - emojiSize.height) / 2
+            )
+            emojiStr.draw(at: point, withAttributes: attrs)
+            emojiIcon.unlockFocus()
+            alert.icon = emojiIcon
 
             let response = alert.runModal()
             if response == .alertFirstButtonReturn {
@@ -179,6 +198,71 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         button.image = image
     }
 
+    // MARK: - Main Menu
+
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        // App menu (first item — shows as the app name in the menu bar)
+        let appMenuItem = NSMenuItem()
+        let appMenu = NSMenu()
+
+        let aboutItem = NSMenuItem(title: "About ShiftChange", action: #selector(showAboutWindow), keyEquivalent: "")
+        aboutItem.target = self
+        appMenu.addItem(aboutItem)
+
+        appMenu.addItem(.separator())
+
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        appMenu.addItem(settingsItem)
+
+        appMenu.addItem(.separator())
+
+        let hideItem = NSMenuItem(title: "Hide ShiftChange", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(hideItem)
+
+        let hideOthersItem = NSMenuItem(title: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(hideOthersItem)
+
+        let showAllItem = NSMenuItem(title: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(showAllItem)
+
+        appMenu.addItem(.separator())
+
+        let quitItem = NSMenuItem(title: "Quit ShiftChange", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(quitItem)
+
+        appMenuItem.submenu = appMenu
+        mainMenu.addItem(appMenuItem)
+
+        NSApplication.shared.mainMenu = mainMenu
+    }
+
+    @objc private func showAboutWindow() {
+        // Build the about view
+        let aboutView = AboutView()
+        let hostingView = NSHostingView(rootView: aboutView)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 280),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "About ShiftChange"
+        window.contentView = hostingView
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+
+        // Show in Dock if not already
+        NSApplication.shared.setActivationPolicy(.regular)
+        window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
     // MARK: - Settings Window
 
     @objc func openSettings() {
@@ -258,5 +342,56 @@ extension AppDelegate: NSWindowDelegate {
         DispatchQueue.main.async {
             NSApplication.shared.setActivationPolicy(.accessory)
         }
+    }
+}
+
+// MARK: - About View
+
+struct AboutView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            // App icon
+            if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
+               let icon = NSImage(contentsOf: iconURL) {
+                Image(nsImage: icon)
+                    .resizable()
+                    .frame(width: 80, height: 80)
+            }
+
+            Text("ShiftChange")
+                .font(.title)
+                .fontWeight(.bold)
+
+            // Credits
+            VStack(spacing: 4) {
+                HStack(spacing: 0) {
+                    Text("Made out of necessity and with love by ")
+                        .font(.subheadline)
+                    Link("Adam Dexter", destination: URL(string: "http://adamdexter.net/")!)
+                        .font(.subheadline)
+                }
+                Text("and Claude Code.")
+                    .font(.subheadline)
+            }
+
+            VStack(spacing: 6) {
+                Text("Has this been useful for you?")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+
+                Link(destination: URL(string: "https://buymeacoffee.com/adamdexter")!) {
+                    Text("☕ Buy Me A Coffee")
+                        .fontWeight(.medium)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.accentColor)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(24)
+        .frame(width: 340)
     }
 }
