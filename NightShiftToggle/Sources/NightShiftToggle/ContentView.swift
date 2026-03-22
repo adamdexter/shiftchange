@@ -9,7 +9,9 @@ struct ContentView: View {
     @State private var installedApps: [AppInfo] = []
     @State private var searchText = ""
     @State private var selectedTab = 0
-    @State private var excludeListHeight: CGFloat = 0
+    // 2.5 app rows as default height (~36pt per row + padding)
+    private static let defaultExcludeListHeight: CGFloat = 98
+    @State private var excludeListHeight: CGFloat = defaultExcludeListHeight
 
     private var filteredApps: [AppInfo] {
         if searchText.isEmpty {
@@ -116,9 +118,9 @@ struct ContentView: View {
             .padding(.horizontal)
             .padding(.vertical, 10)
 
-            if !excludeList.excludedBundleIDs.isEmpty {
-                Divider()
+            Divider()
 
+            if !excludeList.excludedBundleIDs.isEmpty {
                 List {
                     ForEach(excludeList.excludedBundleIDs, id: \.self) { bundleID in
                         ExcludedAppRow(
@@ -129,27 +131,20 @@ struct ContentView: View {
                     }
                 }
                 .frame(height: excludeListHeight)
-                .onChange(of: excludeList.excludedBundleIDs.count) { newCount in
-                    // Auto-size to fit content, ~36pt per row + a little padding
-                    let natural = CGFloat(newCount) * 36 + 8
-                    excludeListHeight = max(44, min(natural, 200))
-                }
-                .onAppear {
-                    let natural = CGFloat(excludeList.excludedBundleIDs.count) * 36 + 8
-                    excludeListHeight = max(44, min(natural, 200))
-                }
 
                 // Drag handle to resize exclude list
                 ExcludeListResizeHandle(height: $excludeListHeight)
             } else {
-                HStack {
+                // Empty state — same height as populated list so content below doesn't shift
+                VStack {
                     Spacer()
                     Text("No apps excluded yet — add apps below")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     Spacer()
                 }
-                .padding(.vertical, 12)
+                .frame(height: Self.defaultExcludeListHeight)
+                .frame(maxWidth: .infinity)
             }
         }
     }
