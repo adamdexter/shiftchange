@@ -257,38 +257,40 @@ struct AppPickerSheet: View {
 
             Divider()
 
-            if installedApps.isEmpty {
-                VStack {
-                    Spacer()
-                    ProgressView("Loading applications...")
-                    Spacer()
-                }
-            } else if filteredApps.isEmpty {
-                VStack {
-                    Spacer()
-                    Text("No matching applications")
-                        .foregroundColor(.secondary)
-                    Spacer()
-                }
-            } else {
-                List {
-                    // Manual add option at top
-                    Button(action: browseForApp) {
-                        HStack {
-                            Image(systemName: "magnifyingglass")
-                                .frame(width: 24, height: 24)
-                                .foregroundColor(.secondary)
+            List {
+                // Manual add option — always available
+                Button(action: browseForApp) {
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .frame(width: 24, height: 24)
+                            .foregroundColor(.secondary)
 
-                            Text("Manually Add Application")
-                                .fontWeight(.medium)
+                        Text("Manually Add Application")
+                            .fontWeight(.medium)
 
-                            Spacer()
-                        }
-                        .padding(.vertical, 2)
-                        .contentShape(Rectangle())
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
+                    .padding(.vertical, 2)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
 
+                if installedApps.isEmpty {
+                    HStack {
+                        Spacer()
+                        ProgressView("Loading applications...")
+                        Spacer()
+                    }
+                    .padding(.vertical, 20)
+                } else if filteredApps.isEmpty {
+                    HStack {
+                        Spacer()
+                        Text("No matching applications")
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    .padding(.vertical, 20)
+                } else {
                     ForEach(filteredApps) { app in
                         HStack {
                             Image(nsImage: InstalledAppsFinder.icon(for: app))
