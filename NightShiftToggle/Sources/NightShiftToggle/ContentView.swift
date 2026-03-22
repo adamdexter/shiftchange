@@ -281,7 +281,7 @@ struct AppPickerSheet: View {
                 VStack(spacing: 8) {
                     Spacer()
                     ProgressView("Loading applications...")
-                    Text("Applications are indexed the first time the app is opened and when new folders are added. This may take a few moments.")
+                    Text("Applications are indexed the first time the app is opened and when new folders are added. This may take a few minutes.\nIf you don't want to wait, you can use the Manually Add Application option in the meantime.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
