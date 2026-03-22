@@ -274,23 +274,33 @@ struct AppPickerSheet: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+            }
+            .frame(maxHeight: 40)
 
-                if installedApps.isEmpty {
-                    HStack {
-                        Spacer()
-                        ProgressView("Loading applications...")
-                        Spacer()
-                    }
-                    .padding(.vertical, 20)
-                } else if filteredApps.isEmpty {
-                    HStack {
-                        Spacer()
-                        Text("No matching applications")
-                            .foregroundColor(.secondary)
-                        Spacer()
-                    }
-                    .padding(.vertical, 20)
-                } else {
+            Divider()
+
+            if installedApps.isEmpty {
+                VStack(spacing: 8) {
+                    Spacer()
+                    ProgressView("Loading applications...")
+                    Text("Applications are indexed the first time the app is opened and when new folders are added. This may take a few moments.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 300)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if filteredApps.isEmpty {
+                VStack {
+                    Spacer()
+                    Text("No matching applications")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
                     ForEach(filteredApps) { app in
                         HStack {
                             Image(nsImage: InstalledAppsFinder.icon(for: app))
