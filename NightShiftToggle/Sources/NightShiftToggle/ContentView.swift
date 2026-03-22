@@ -6,31 +6,56 @@ struct ContentView: View {
     @EnvironmentObject var excludeList: ExcludeListManager
     @EnvironmentObject var focusMonitor: FocusMonitor
 
-    @State private var showingAppPicker = false
     @State private var installedApps: [AppInfo] = []
+    @State private var searchText = ""
+    @State private var selectedTab = 0
+
+    private var filteredApps: [AppInfo] {
+        let available = installedApps.filter { !excludeList.contains(bundleID: $0.bundleID) }
+        if searchText.isEmpty {
+            return available
+        }
+        return available.filter {
+            $0.name.localizedCaseInsensitiveContains(searchText) ||
+            $0.bundleID.localizedCaseInsensitiveContains(searchText)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
+            // Status bar
             statusSection
                 .padding()
                 .background(Color(nsColor: .controlBackgroundColor))
 
             Divider()
 
+            // Exclude list (pinned at top)
             excludeListSection
-        }
-        .frame(minWidth: 520, minHeight: 450)
-        .onAppear { reloadApps() }
-        .sheet(isPresented: $showingAppPicker) {
-            AppPickerSheet(
-                installedApps: installedApps,
-                excludeList: excludeList,
-                isPresented: $showingAppPicker,
-                onAppsChanged: { reloadApps() }
-            )
-        }
-    }
 
+            Divider()
+
+            // Tab picker: Applications / Folders to Search
+            Picker("", selection: $selectedTab) {
+                Text("Applications").tag(0)
+                Text("Folders to Search").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            // Tab content
+            if selectedTab == 0 {
+                appListSection
+            } else {
+                foldersSection
+            }
+        }
+        .frame(minWidth: 520, minHeight: 550)
+        .onAppear { reloadApps() }
+    }
 
     private func reloadApps() {
         DispatchQueue.global(qos: .userInitiated).async {
@@ -87,35 +112,13 @@ struct ContentView: View {
                 Text("Night Shift disabled when these apps are in focus")
                     .font(.caption)
                     .foregroundColor(.secondary)
-
-                Spacer()
-
-                Button(action: { showingAppPicker = true }) {
-                    Image(systemName: "plus")
-                }
-                .help("Add application")
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
 
-            Divider()
+            if !excludeList.excludedBundleIDs.isEmpty {
+                Divider()
 
-            if excludeList.excludedBundleIDs.isEmpty {
-                VStack(spacing: 8) {
-                    Spacer()
-                    Image(systemName: "moon.stars")
-                        .font(.system(size: 36))
-                        .foregroundColor(.secondary)
-                    Text("No apps in exclude list")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    Text("Click + to add apps to the exclude list")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity)
-            } else {
                 List {
                     ForEach(excludeList.excludedBundleIDs, id: \.self) { bundleID in
                         ExcludedAppRow(
@@ -125,116 +128,23 @@ struct ContentView: View {
                         )
                     }
                 }
-            }
-        }
-    }
-
-}
-
-// MARK: - Excluded App Row
-
-struct ExcludedAppRow: View {
-    let bundleID: String
-    let installedApps: [AppInfo]
-    let onRemove: () -> Void
-
-    var body: some View {
-        HStack {
-            if let app = installedApps.first(where: { $0.bundleID == bundleID }) {
-                Image(nsImage: InstalledAppsFinder.icon(for: app))
-                    .resizable()
-                    .frame(width: 24, height: 24)
-
-                VStack(alignment: .leading) {
-                    Text(app.name)
-                        .fontWeight(.medium)
-                    Text(bundleID)
-                        .font(.caption)
+                .frame(minHeight: 60, maxHeight: 150)
+            } else {
+                HStack {
+                    Spacer()
+                    Text("No apps excluded yet — add apps below")
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
+                    Spacer()
                 }
-            } else {
-                Image(systemName: "app")
-                    .frame(width: 24, height: 24)
-
-                VStack(alignment: .leading) {
-                    Text(bundleID)
-                        .fontWeight(.medium)
-                }
+                .padding(.vertical, 12)
             }
-
-            Spacer()
-
-            Button(action: onRemove) {
-                Image(systemName: "minus.circle.fill")
-                    .foregroundColor(.red)
-            }
-            .buttonStyle(.plain)
-            .help("Remove from exclude list")
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-// MARK: - App Picker Sheet
-
-struct AppPickerSheet: View {
-    let installedApps: [AppInfo]
-    @ObservedObject var excludeList: ExcludeListManager
-    @Binding var isPresented: Bool
-    var onAppsChanged: () -> Void
-
-    @State private var searchText = ""
-    @State private var selectedTab = 0
-
-    private var filteredApps: [AppInfo] {
-        let available = installedApps.filter { !excludeList.contains(bundleID: $0.bundleID) }
-        if searchText.isEmpty {
-            return available
-        }
-        return available.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText) ||
-            $0.bundleID.localizedCaseInsensitiveContains(searchText)
         }
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Add Application")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                Spacer()
-                Button("Done") { isPresented = false }
-                    .keyboardShortcut(.defaultAction)
-            }
-            .padding()
+    // MARK: - Applications Section
 
-            Divider()
-
-            // Tab picker: Applications / Search Folders
-            Picker("", selection: $selectedTab) {
-                Text("Applications").tag(0)
-                Text("Folders to Search").tag(1)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-
-            Divider()
-
-            if selectedTab == 0 {
-                appListTab
-            } else {
-                foldersTab
-            }
-        }
-        .frame(width: 520, height: 480)
-    }
-
-    // MARK: - Applications Tab
-
-    private var appListTab: some View {
+    private var appListSection: some View {
         VStack(spacing: 0) {
             // Search field
             HStack {
@@ -258,6 +168,7 @@ struct AppPickerSheet: View {
 
             Divider()
 
+            // Manually add option — always available
             Button(action: browseForApp) {
                 HStack {
                     Image(systemName: "magnifyingglass")
@@ -277,6 +188,7 @@ struct AppPickerSheet: View {
 
             Divider()
 
+            // App list / loading / empty
             if installedApps.isEmpty {
                 VStack(spacing: 8) {
                     Spacer()
@@ -327,9 +239,9 @@ struct AppPickerSheet: View {
         }
     }
 
-    // MARK: - Search Folders Tab
+    // MARK: - Folders Section
 
-    private var foldersTab: some View {
+    private var foldersSection: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Additional application folders are scanned for .app bundles.")
@@ -346,7 +258,6 @@ struct AppPickerSheet: View {
 
             Divider()
 
-            // Default paths (non-removable)
             List {
                 Section("Default Paths") {
                     ForEach(InstalledAppsFinder.defaultSearchPaths, id: \.self) { path in
@@ -373,7 +284,7 @@ struct AppPickerSheet: View {
                                 Spacer()
                                 Button(action: {
                                     excludeList.removeFolder(path)
-                                    onAppsChanged()
+                                    reloadApps()
                                 }) {
                                     Image(systemName: "minus.circle.fill")
                                         .foregroundColor(.red)
@@ -386,6 +297,8 @@ struct AppPickerSheet: View {
             }
         }
     }
+
+    // MARK: - Actions
 
     private func browseForApp() {
         let panel = NSOpenPanel()
@@ -403,7 +316,7 @@ struct AppPickerSheet: View {
                 excludeList.add(bundleID: app.bundleID)
             }
         }
-        onAppsChanged()
+        reloadApps()
     }
 
     private func addFolder() {
@@ -416,6 +329,50 @@ struct AppPickerSheet: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         excludeList.addFolder(url.path)
-        onAppsChanged()
+        reloadApps()
+    }
+}
+
+// MARK: - Excluded App Row
+
+struct ExcludedAppRow: View {
+    let bundleID: String
+    let installedApps: [AppInfo]
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack {
+            if let app = installedApps.first(where: { $0.bundleID == bundleID }) {
+                Image(nsImage: InstalledAppsFinder.icon(for: app))
+                    .resizable()
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading) {
+                    Text(app.name)
+                        .fontWeight(.medium)
+                    Text(bundleID)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                Image(systemName: "app")
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading) {
+                    Text(bundleID)
+                        .fontWeight(.medium)
+                }
+            }
+
+            Spacer()
+
+            Button(action: onRemove) {
+                Image(systemName: "minus.circle.fill")
+                    .foregroundColor(.red)
+            }
+            .buttonStyle(.plain)
+            .help("Remove from exclude list")
+        }
+        .padding(.vertical, 2)
     }
 }
