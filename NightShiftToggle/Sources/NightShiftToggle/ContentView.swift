@@ -9,8 +9,8 @@ struct ContentView: View {
     @State private var installedApps: [AppInfo] = []
     @State private var searchText = ""
     @State private var selectedTab = 0
-    // 2.5 app rows as default height (~36pt per row + padding)
-    private static let defaultExcludeListHeight: CGFloat = 98
+    // 2.5 app rows as default height (~44pt per row + padding)
+    private static let defaultExcludeListHeight: CGFloat = 118
     @State private var excludeListHeight: CGFloat = defaultExcludeListHeight
 
     private var filteredApps: [AppInfo] {
