@@ -2,18 +2,8 @@ import SwiftUI
 import AppKit
 import ServiceManagement
 
-@main
-struct NightShiftToggleApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-
-    var body: some Scene {
-        // We manage the settings window manually via AppDelegate,
-        // but SwiftUI requires at least one Scene.
-        Settings {
-            EmptyView()
-        }
-    }
-}
+// App delegate and UI are defined here.
+// Entry point is in main.swift.
 
 // MARK: - App Delegate
 
@@ -24,6 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var statusItem: NSStatusItem!
     private var statusMenu: NSMenu!
     private var settingsWindow: NSWindow?
+    private var aboutWindow: NSWindow?
 
     // Menu items that need updating
     private var statusMenuItem: NSMenuItem!
@@ -241,7 +232,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     @objc private func showAboutWindow() {
-        // Build the about view
+        // If already open, bring to front
+        if let window = aboutWindow, window.isVisible {
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+
         let aboutView = AboutView()
         let hostingView = NSHostingView(rootView: aboutView)
 
@@ -257,7 +253,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         window.isReleasedWhenClosed = false
         window.level = .floating
 
-        // Show in Dock if not already
+        self.aboutWindow = window
+
         NSApplication.shared.setActivationPolicy(.regular)
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
@@ -295,6 +292,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         // Show in Dock while window is open
         NSApplication.shared.setActivationPolicy(.regular)
+        // Re-apply main menu (macOS can reset it on activation policy change)
+        setupMainMenu()
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
