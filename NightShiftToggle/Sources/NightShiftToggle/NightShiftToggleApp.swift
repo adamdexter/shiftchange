@@ -61,13 +61,43 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Set up menu bar
         setupStatusItem()
 
-        // Show settings on first launch
-        if !UserDefaults.standard.bool(forKey: Self.hasLaunchedKey) {
+        // Show settings on first launch OR if exclude list is empty
+        let isFirstLaunch = !UserDefaults.standard.bool(forKey: Self.hasLaunchedKey)
+        if isFirstLaunch {
             UserDefaults.standard.set(true, forKey: Self.hasLaunchedKey)
+        }
+        if isFirstLaunch || excludeList.excludedBundleIDs.isEmpty {
             DispatchQueue.main.async { [weak self] in
                 self?.openSettings()
             }
         }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // If the settings window is visible, intercept quit to offer minimize option
+        if let window = settingsWindow, window.isVisible {
+            let alert = NSAlert()
+            alert.messageText = "Quit ShiftChange?"
+            alert.informativeText = "Did you mean to terminate and quit this app or just minimize to the menu bar?"
+            alert.addButton(withTitle: "Minimize to Menu Bar")
+            alert.addButton(withTitle: "Quit")
+            alert.alertStyle = .informational
+
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                // Minimize: just close the window and keep running
+                window.close()
+                return .terminateCancel
+            } else {
+                // Quit: actually terminate
+                focusMonitor.stop()
+                return .terminateNow
+            }
+        }
+
+        // No window open — quit directly (e.g. from menu bar Quit)
+        focusMonitor.stop()
+        return .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) {
