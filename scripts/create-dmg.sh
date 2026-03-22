@@ -88,102 +88,93 @@ echo "==> Generating DMG background image..."
 BG_DIR="${BUILD_DIR}/dmg-background"
 mkdir -p "$BG_DIR"
 
-# Use macOS CoreGraphics via Python to render a proper background with text
-python3 << 'PYEOF'
-import Quartz
+# Use Swift to render background with CoreGraphics (no third-party deps)
+swift - "$BG_DIR" << 'SWIFTEOF'
+import Foundation
+import CoreGraphics
 import CoreText
-import os
+import ImageIO
+import UniformTypeIdentifiers
 
-BG_DIR = os.environ.get("BG_DIR", ".")
+let bgDir = CommandLine.arguments[1]
 
-def create_background(width, height, scale, output_path):
-    pw, ph = int(width * scale), int(height * scale)
-    cs = Quartz.CGColorSpaceCreateWithName(Quartz.kCGColorSpaceSRGB)
-    ctx = Quartz.CGBitmapContextCreate(
-        None, pw, ph, 8, pw * 4, cs,
-        Quartz.kCGImageAlphaPremultipliedLast
-    )
-    Quartz.CGContextScaleCTM(ctx, scale, scale)
+func createBackground(width: Int, height: Int, scale: Int, outputPath: String) {
+    let pw = width * scale
+    let ph = height * scale
+    let cs = CGColorSpaceCreateDeviceRGB()
+    guard let ctx = CGContext(
+        data: nil, width: pw, height: ph,
+        bitsPerComponent: 8, bytesPerRow: pw * 4,
+        space: cs, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ) else { return }
 
-    # ── Background gradient ──
-    gradient_cs = Quartz.CGColorSpaceCreateWithName(Quartz.kCGColorSpaceSRGB)
-    colors = [
-        Quartz.CGColorCreate(gradient_cs, [0.96, 0.96, 0.97, 1.0]),  # top
-        Quartz.CGColorCreate(gradient_cs, [0.90, 0.90, 0.92, 1.0]),  # bottom
+    ctx.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
+    let w = CGFloat(width)
+    let h = CGFloat(height)
+
+    // ── Background gradient ──
+    let colors = [
+        CGColor(red: 0.96, green: 0.96, blue: 0.97, alpha: 1.0),
+        CGColor(red: 0.90, green: 0.90, blue: 0.92, alpha: 1.0),
+    ] as CFArray
+    let gradient = CGGradient(colorsSpace: cs, colors: colors, locations: [0.0, 1.0])!
+    ctx.drawLinearGradient(gradient,
+        start: CGPoint(x: 0, y: h),
+        end: CGPoint(x: 0, y: 0),
+        options: [])
+
+    // ── Arrow (shaft + arrowhead) ──
+    let arrowY = h - 205
+    let shaftStartX: CGFloat = 235
+    let shaftEndX: CGFloat = 415
+
+    ctx.setStrokeColor(red: 0.55, green: 0.55, blue: 0.58, alpha: 1.0)
+    ctx.setLineWidth(2.5)
+    ctx.setLineCap(.round)
+    ctx.move(to: CGPoint(x: shaftStartX, y: arrowY))
+    ctx.addLine(to: CGPoint(x: shaftEndX, y: arrowY))
+    ctx.strokePath()
+
+    // Arrowhead
+    let headSize: CGFloat = 12
+    ctx.setFillColor(red: 0.55, green: 0.55, blue: 0.58, alpha: 1.0)
+    ctx.move(to: CGPoint(x: shaftEndX + headSize + 4, y: arrowY))
+    ctx.addLine(to: CGPoint(x: shaftEndX - 2, y: arrowY + headSize))
+    ctx.addLine(to: CGPoint(x: shaftEndX - 2, y: arrowY - headSize))
+    ctx.closePath()
+    ctx.fillPath()
+
+    // ── Text ──
+    let text = "Drag ShiftChange to Applications" as CFString
+    let font = CTFontCreateWithName("Helvetica Neue" as CFString, 15, nil)
+    let attrs: [CFString: Any] = [
+        kCTFontAttributeName: font,
+        kCTForegroundColorAttributeName: CGColor(red: 0.45, green: 0.45, blue: 0.48, alpha: 1.0),
     ]
-    gradient = Quartz.CGGradientCreateWithColors(gradient_cs, colors, [0.0, 1.0])
-    Quartz.CGContextDrawLinearGradient(
-        ctx, gradient,
-        Quartz.CGPointMake(0, height), Quartz.CGPointMake(0, 0), 0
-    )
+    let attrString = CFAttributedStringCreate(nil, text, attrs as CFDictionary)!
+    let line = CTLineCreateWithAttributedString(attrString)
+    let textBounds = CTLineGetBoundsWithOptions(line, [])
+    let textX = (w - textBounds.width) / 2
+    let textY = h - 320
 
-    # ── Arrow (shaft + head) ──
-    arrow_y = height - 205  # Flip for CG coords (origin bottom-left)
-    shaft_start_x = 235
-    shaft_end_x = 415
+    ctx.textPosition = CGPoint(x: textX, y: textY)
+    CTLineDraw(line, ctx)
 
-    Quartz.CGContextSetRGBStrokeColor(ctx, 0.55, 0.55, 0.58, 1.0)
-    Quartz.CGContextSetLineWidth(ctx, 2.5)
-    Quartz.CGContextSetLineCap(ctx, Quartz.kCGLineCapRound)
+    // ── Save as PNG ──
+    guard let image = ctx.makeImage() else { return }
+    let url = URL(fileURLWithPath: outputPath) as CFURL
+    guard let dest = CGImageDestinationCreateWithURL(url, UTType.png.identifier as CFString, 1, nil) else { return }
+    CGImageDestinationAddImage(dest, image, nil)
+    CGImageDestinationFinalize(dest)
+}
 
-    # Shaft
-    Quartz.CGContextMoveToPoint(ctx, shaft_start_x, arrow_y)
-    Quartz.CGContextAddLineToPoint(ctx, shaft_end_x, arrow_y)
-    Quartz.CGContextStrokePath(ctx)
-
-    # Arrowhead
-    head_size = 12
-    Quartz.CGContextSetRGBFillColor(ctx, 0.55, 0.55, 0.58, 1.0)
-    Quartz.CGContextMoveToPoint(ctx, shaft_end_x + head_size + 4, arrow_y)
-    Quartz.CGContextAddLineToPoint(ctx, shaft_end_x - 2, arrow_y + head_size)
-    Quartz.CGContextAddLineToPoint(ctx, shaft_end_x - 2, arrow_y - head_size)
-    Quartz.CGContextClosePath(ctx)
-    Quartz.CGContextFillPath(ctx)
-
-    # ── Text: "Drag ShiftChange to Applications" ──
-    text_y = height - 320  # CG coords
-    text = "Drag ShiftChange to Applications"
-
-    font = CoreText.CTFontCreateWithName("Helvetica Neue", 15 , None)
-    attrs = {
-        CoreText.kCTFontAttributeName: font,
-        CoreText.kCTForegroundColorFromContextAttributeName: True,
-    }
-    attr_string = CoreText.CFAttributedStringCreate(None, text, attrs)
-    line = CoreText.CTLineCreateWithAttributedString(attr_string)
-
-    # Measure text to center it
-    text_bounds = CoreText.CTLineGetBoundsWithOptions(line, 0)
-    text_w = text_bounds.size.width
-    text_x = (width - text_w) / 2
-
-    Quartz.CGContextSetRGBFillColor(ctx, 0.45, 0.45, 0.48, 1.0)
-    Quartz.CGContextSetTextPosition(ctx, text_x, text_y)
-    CoreText.CTLineDraw(line, ctx)
-
-    # ── Save as PNG ──
-    image = Quartz.CGBitmapContextCreateImage(ctx)
-    url = Quartz.CFURLCreateFromFileSystemRepresentation(
-        None, output_path.encode(), len(output_path.encode()), False
-    )
-    dest = Quartz.CGImageDestinationCreateWithURL(url, "public.png", 1, None)
-    # Set DPI metadata
-    props = {
-        Quartz.kCGImagePropertyDPIWidth: 72 * scale,
-        Quartz.kCGImagePropertyDPIHeight: 72 * scale,
-    }
-    Quartz.CGImageDestinationAddImage(dest, image, props)
-    Quartz.CGImageDestinationFinalize(dest)
-
-# 1x background
-create_background(660, 400, 1, os.path.join(BG_DIR, "background.png"))
-# 2x retina background
-create_background(660, 400, 2, os.path.join(BG_DIR, "background@2x.png"))
+createBackground(width: 660, height: 400, scale: 1,
+    outputPath: "\(bgDir)/background.png")
+createBackground(width: 660, height: 400, scale: 2,
+    outputPath: "\(bgDir)/background@2x.png")
 
 print("Background images created.")
-PYEOF
-
-export BG_DIR
+SWIFTEOF
 
 # ── 4. Create DMG ─────────────────────────────────────────────────
 echo "==> Assembling DMG..."
