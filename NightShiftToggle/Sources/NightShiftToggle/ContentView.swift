@@ -9,13 +9,13 @@ struct ContentView: View {
     @State private var installedApps: [AppInfo] = []
     @State private var searchText = ""
     @State private var selectedTab = 0
+    @State private var excludeListHeight: CGFloat = 0
 
     private var filteredApps: [AppInfo] {
-        let available = installedApps.filter { !excludeList.contains(bundleID: $0.bundleID) }
         if searchText.isEmpty {
-            return available
+            return installedApps
         }
-        return available.filter {
+        return installedApps.filter {
             $0.name.localizedCaseInsensitiveContains(searchText) ||
             $0.bundleID.localizedCaseInsensitiveContains(searchText)
         }
@@ -128,7 +128,19 @@ struct ContentView: View {
                         )
                     }
                 }
-                .frame(minHeight: 60, maxHeight: 150)
+                .frame(height: excludeListHeight)
+                .onChange(of: excludeList.excludedBundleIDs.count) { newCount in
+                    // Auto-size to fit content, ~36pt per row + a little padding
+                    let natural = CGFloat(newCount) * 36 + 8
+                    excludeListHeight = max(44, min(natural, 200))
+                }
+                .onAppear {
+                    let natural = CGFloat(excludeList.excludedBundleIDs.count) * 36 + 8
+                    excludeListHeight = max(44, min(natural, 200))
+                }
+
+                // Drag handle to resize exclude list
+                ExcludeListResizeHandle(height: $excludeListHeight)
             } else {
                 HStack {
                     Spacer()
@@ -212,10 +224,12 @@ struct ContentView: View {
             } else {
                 List {
                     ForEach(filteredApps) { app in
+                        let isExcluded = excludeList.contains(bundleID: app.bundleID)
                         HStack {
                             Image(nsImage: InstalledAppsFinder.icon(for: app))
                                 .resizable()
                                 .frame(width: 24, height: 24)
+                                .opacity(isExcluded ? 0.4 : 1)
 
                             VStack(alignment: .leading) {
                                 Text(app.name)
@@ -224,13 +238,20 @@ struct ContentView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
+                            .opacity(isExcluded ? 0.4 : 1)
 
                             Spacer()
 
-                            Button("Add") {
-                                excludeList.add(bundleID: app.bundleID)
+                            if isExcluded {
+                                Button("Added") {}
+                                    .buttonStyle(.bordered)
+                                    .disabled(true)
+                            } else {
+                                Button("Add") {
+                                    excludeList.add(bundleID: app.bundleID)
+                                }
+                                .buttonStyle(.bordered)
                             }
-                            .buttonStyle(.bordered)
                         }
                         .padding(.vertical, 2)
                     }
@@ -330,6 +351,45 @@ struct ContentView: View {
 
         excludeList.addFolder(url.path)
         reloadApps()
+    }
+}
+
+// MARK: - Exclude List Resize Handle
+
+struct ExcludeListResizeHandle: View {
+    @Binding var height: CGFloat
+    @State private var isDragging = false
+
+    var body: some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor))
+            .frame(height: 4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Color.secondary.opacity(isDragging ? 0.6 : 0.3))
+                    .frame(width: 36, height: 3)
+            )
+            .contentShape(Rectangle().size(width: 520, height: 12).offset(CGSize(width: 0, height: -4)))
+            .cursor(.resizeUpDown)
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        isDragging = true
+                        let newHeight = height + value.translation.height
+                        height = max(44, min(newHeight, 400))
+                    }
+                    .onEnded { _ in
+                        isDragging = false
+                    }
+            )
+    }
+}
+
+extension View {
+    func cursor(_ cursor: NSCursor) -> some View {
+        onHover { inside in
+            if inside { cursor.push() } else { NSCursor.pop() }
+        }
     }
 }
 
