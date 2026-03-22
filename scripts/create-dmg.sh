@@ -193,16 +193,24 @@ ln -s /Applications "$DMG_STAGING/Applications"
 cp "${BG_DIR}/background.png" "$DMG_STAGING/.background/background.png"
 cp "${BG_DIR}/background@2x.png" "$DMG_STAGING/.background/background@2x.png"
 
-# Create the DMG
+# Eject any existing volume with the same name to avoid "ShiftChange 1"
+if [ -d "/Volumes/${APP_NAME}" ]; then
+    echo "   Ejecting existing /Volumes/${APP_NAME}..."
+    hdiutil detach "/Volumes/${APP_NAME}" 2>/dev/null || true
+    sleep 1
+fi
+
+# Create the DMG using HFS+ (better .DS_Store support than APFS)
 rm -f "$DMG_TEMP" "$DMG_FINAL"
 hdiutil create -volname "$APP_NAME" \
     -srcfolder "$DMG_STAGING" \
     -ov -format UDRW \
-    "$DMG_TEMP" 2>/dev/null
+    -fs HFS+ \
+    "$DMG_TEMP"
 
 # Mount it to configure the Finder window
 echo "==> Configuring DMG Finder window..."
-MOUNT_DIR=$(hdiutil attach -readwrite -noverify "$DMG_TEMP" 2>/dev/null | grep "/Volumes/" | sed 's/.*\/Volumes/\/Volumes/')
+MOUNT_DIR=$(hdiutil attach -readwrite -noverify -noautoopen "$DMG_TEMP" | grep -o '/Volumes/.*')
 MOUNT_DIR=$(echo "$MOUNT_DIR" | xargs)  # trim whitespace
 
 if [ -z "$MOUNT_DIR" ]; then
@@ -210,70 +218,76 @@ if [ -z "$MOUNT_DIR" ]; then
     exit 1
 fi
 
-echo "   Mounted at: ${MOUNT_DIR}"
+# Derive the actual volume name from the mount path (handles "ShiftChange 1" etc.)
+VOL_NAME=$(basename "$MOUNT_DIR")
+echo "   Mounted at: ${MOUNT_DIR} (volume: ${VOL_NAME})"
 
 # Give Finder time to notice the new volume
-sleep 2
+sleep 3
 
-# Use AppleScript to configure the Finder window appearance
-# Retry up to 3 times since Finder may not see the disk immediately
-for attempt in 1 2 3; do
-    if osascript << ASCRIPT
-        tell application "Finder"
-            -- Wait for disk to appear
-            set maxWait to 10
-            set diskFound to false
-            repeat maxWait times
-                try
-                    set diskFound to exists disk "${APP_NAME}"
-                end try
-                if diskFound then exit repeat
-                delay 1
-            end repeat
-
-            if not diskFound then
-                error "Disk ${APP_NAME} not found after waiting"
-            end if
-
-            tell disk "${APP_NAME}"
-                open
-                set current view of container window to icon view
-                set toolbar visible of container window to false
-                set statusbar visible of container window to false
-                set the bounds of container window to {100, 100, 760, 500}
-                set viewOptions to the icon view options of container window
-                set arrangement of viewOptions to not arranged
-                set icon size of viewOptions to 80
-                set text size of viewOptions to 13
-                set background picture of viewOptions to file ".background:background.png"
-                set position of item "${APP_NAME}.app" of container window to {180, 190}
-                set position of item "Applications" of container window to {480, 190}
-                close
-                open
-                update without registering applications
-                delay 1
-                close
-            end tell
-        end tell
-ASCRIPT
-    then
-        echo "   Finder window configured."
-        break
-    else
-        echo "   Attempt ${attempt} failed, retrying..."
-        sleep 2
-    fi
-done
-
-# Set volume icon
+# Set volume icon before AppleScript (so Finder sees it)
 if [ -f "${APP_BUNDLE}/Contents/Resources/AppIcon.icns" ]; then
     cp "${APP_BUNDLE}/Contents/Resources/AppIcon.icns" "${MOUNT_DIR}/.VolumeIcon.icns"
     SetFile -c icnC "${MOUNT_DIR}/.VolumeIcon.icns" 2>/dev/null || true
     SetFile -a C "${MOUNT_DIR}" 2>/dev/null || true
 fi
 
+# Use AppleScript to configure the Finder window appearance
+# Use the actual volume name (VOL_NAME) to address the disk
+echo "   Configuring Finder window layout..."
+osascript << ASCRIPT
+    tell application "Finder"
+        -- Wait for disk to appear
+        set maxWait to 15
+        set diskFound to false
+        repeat maxWait times
+            try
+                set diskFound to exists disk "${VOL_NAME}"
+            end try
+            if diskFound then exit repeat
+            delay 1
+        end repeat
+
+        if not diskFound then
+            error "Disk ${VOL_NAME} not found after waiting"
+        end if
+
+        tell disk "${VOL_NAME}"
+            open
+            delay 1
+
+            set current view of container window to icon view
+            set toolbar visible of container window to false
+            set statusbar visible of container window to false
+            set the bounds of container window to {100, 100, 760, 500}
+
+            set viewOptions to the icon view options of container window
+            set arrangement of viewOptions to not arranged
+            set icon size of viewOptions to 80
+            set text size of viewOptions to 13
+            set background picture of viewOptions to file ".background:background.png"
+
+            set position of item "${APP_NAME}.app" of container window to {180, 190}
+            set position of item "Applications" of container window to {480, 190}
+
+            -- Close and reopen to flush .DS_Store
+            close
+            delay 1
+            open
+            delay 2
+            close
+            delay 1
+        end tell
+    end tell
+ASCRIPT
+
+echo "   Finder window configured."
+
+# Ensure .DS_Store is flushed to disk
 sync
-hdiutil detach "$MOUNT_DIR" 2>/dev/null
+sleep 1
+
+hdiutil detach "$MOUNT_DIR"
 
 # ── 5. Compress to final DMG ──────────────────────────────────────
 echo "==> Compressing final DMG..."
