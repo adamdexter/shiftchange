@@ -6,29 +6,57 @@ struct ContentView: View {
     @EnvironmentObject var excludeList: ExcludeListManager
     @EnvironmentObject var focusMonitor: FocusMonitor
 
-    @State private var showingAppPicker = false
     @State private var installedApps: [AppInfo] = []
+    @State private var searchText = ""
+    @State private var selectedTab = 0
+    // 2.5 app rows as default height (~44pt per row + padding)
+    private static let defaultExcludeListHeight: CGFloat = 118
+    @State private var excludeListHeight: CGFloat = defaultExcludeListHeight
+
+    private var filteredApps: [AppInfo] {
+        if searchText.isEmpty {
+            return installedApps
+        }
+        return installedApps.filter {
+            $0.name.localizedCaseInsensitiveContains(searchText) ||
+            $0.bundleID.localizedCaseInsensitiveContains(searchText)
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
+            // Status bar
             statusSection
                 .padding()
                 .background(Color(nsColor: .controlBackgroundColor))
 
             Divider()
 
+            // Exclude list (pinned at top)
             excludeListSection
+
+            Divider()
+
+            // Tab picker: Applications / Folders to Search
+            Picker("", selection: $selectedTab) {
+                Text("Applications").tag(0)
+                Text("Folders to Search").tag(1)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            // Tab content
+            if selectedTab == 0 {
+                appListSection
+            } else {
+                foldersSection
+            }
         }
-        .frame(minWidth: 520, minHeight: 450)
+        .frame(minWidth: 520, minHeight: 550)
         .onAppear { reloadApps() }
-        .sheet(isPresented: $showingAppPicker) {
-            AppPickerSheet(
-                installedApps: installedApps,
-                excludeList: excludeList,
-                isPresented: $showingAppPicker,
-                onAppsChanged: { reloadApps() }
-            )
-        }
     }
 
     private func reloadApps() {
@@ -86,35 +114,13 @@ struct ContentView: View {
                 Text("Night Shift disabled when these apps are in focus")
                     .font(.caption)
                     .foregroundColor(.secondary)
-
-                Spacer()
-
-                Button(action: { showingAppPicker = true }) {
-                    Image(systemName: "plus")
-                }
-                .help("Add application")
             }
             .padding(.horizontal)
             .padding(.vertical, 10)
 
             Divider()
 
-            if excludeList.excludedBundleIDs.isEmpty {
-                VStack(spacing: 8) {
-                    Spacer()
-                    Image(systemName: "moon.stars")
-                        .font(.system(size: 36))
-                        .foregroundColor(.secondary)
-                    Text("No apps in exclude list")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    Text("Click + to add apps to the exclude list")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity)
-            } else {
+            if !excludeList.excludedBundleIDs.isEmpty {
                 List {
                     ForEach(excludeList.excludedBundleIDs, id: \.self) { bundleID in
                         ExcludedAppRow(
@@ -124,10 +130,262 @@ struct ContentView: View {
                         )
                     }
                 }
+                .frame(height: excludeListHeight)
+
+                // Drag handle to resize exclude list
+                ExcludeListResizeHandle(height: $excludeListHeight)
+            } else {
+                // Empty state — same height as populated list so content below doesn't shift
+                VStack {
+                    Spacer()
+                    Text("No apps excluded yet — add apps below")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .frame(height: Self.defaultExcludeListHeight)
+                .frame(maxWidth: .infinity)
             }
         }
     }
 
+    // MARK: - Applications Section
+
+    private var appListSection: some View {
+        VStack(spacing: 0) {
+            // Search field
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                TextField("Search applications...", text: $searchText)
+                    .textFieldStyle(.plain)
+                if !searchText.isEmpty {
+                    Button(action: { searchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(8)
+            .background(Color(nsColor: .controlBackgroundColor))
+            .cornerRadius(8)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            // Manually add option — always available
+            Button(action: browseForApp) {
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .frame(width: 24, height: 24)
+                        .foregroundColor(.secondary)
+
+                    Text("Manually Add Application")
+                        .fontWeight(.medium)
+
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Divider()
+
+            // App list / loading / empty
+            if installedApps.isEmpty {
+                VStack(spacing: 8) {
+                    Spacer()
+                    ProgressView("Loading applications...")
+                    Text("Applications are indexed the first time the app is opened and when new folders are added. This may take a few minutes.\nIf you don't want to wait, you can use the Manually Add Application option in the meantime.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 300)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if filteredApps.isEmpty {
+                VStack {
+                    Spacer()
+                    Text("No matching applications")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(filteredApps) { app in
+                        let isExcluded = excludeList.contains(bundleID: app.bundleID)
+                        HStack {
+                            Image(nsImage: InstalledAppsFinder.icon(for: app))
+                                .resizable()
+                                .frame(width: 24, height: 24)
+                                .opacity(isExcluded ? 0.4 : 1)
+
+                            VStack(alignment: .leading) {
+                                Text(app.name)
+                                    .fontWeight(.medium)
+                                Text(app.bundleID)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .opacity(isExcluded ? 0.4 : 1)
+
+                            Spacer()
+
+                            if isExcluded {
+                                Button("Added") {}
+                                    .buttonStyle(.bordered)
+                                    .disabled(true)
+                            } else {
+                                Button("Add") {
+                                    excludeList.add(bundleID: app.bundleID)
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Folders Section
+
+    private var foldersSection: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Additional application folders are scanned for .app bundles.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button(action: addFolder) {
+                    Label("Add Folder", systemImage: "folder.badge.plus")
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+
+            Divider()
+
+            List {
+                Section("Default Paths") {
+                    ForEach(InstalledAppsFinder.defaultSearchPaths, id: \.self) { path in
+                        HStack {
+                            Image(systemName: "folder")
+                                .foregroundColor(.secondary)
+                            Text(path)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("built-in")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+
+                if !excludeList.additionalAppFolders.isEmpty {
+                    Section("Custom Paths") {
+                        ForEach(excludeList.additionalAppFolders, id: \.self) { path in
+                            HStack {
+                                Image(systemName: "folder.fill")
+                                    .foregroundColor(.accentColor)
+                                Text(path)
+                                Spacer()
+                                Button(action: {
+                                    excludeList.removeFolder(path)
+                                    reloadApps()
+                                }) {
+                                    Image(systemName: "minus.circle.fill")
+                                        .foregroundColor(.red)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func browseForApp() {
+        let panel = NSOpenPanel()
+        panel.title = "Select an Application"
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+
+        guard panel.runModal() == .OK else { return }
+
+        for url in panel.urls {
+            if let app = InstalledAppsFinder.appInfo(from: url) {
+                excludeList.add(bundleID: app.bundleID)
+            }
+        }
+        reloadApps()
+    }
+
+    private func addFolder() {
+        let panel = NSOpenPanel()
+        panel.title = "Select Applications Folder"
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        excludeList.addFolder(url.path)
+        reloadApps()
+    }
+}
+
+// MARK: - Exclude List Resize Handle
+
+struct ExcludeListResizeHandle: View {
+    @Binding var height: CGFloat
+    @State private var isDragging = false
+
+    var body: some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor))
+            .frame(height: 4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Color.secondary.opacity(isDragging ? 0.6 : 0.3))
+                    .frame(width: 36, height: 3)
+            )
+            .contentShape(Rectangle().size(width: 520, height: 12).offset(CGSize(width: 0, height: -4)))
+            .cursor(.resizeUpDown)
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        isDragging = true
+                        let newHeight = height + value.translation.height
+                        height = max(44, min(newHeight, 400))
+                    }
+                    .onEnded { _ in
+                        isDragging = false
+                    }
+            )
+    }
+}
+
+extension View {
+    func cursor(_ cursor: NSCursor) -> some View {
+        onHover { inside in
+            if inside { cursor.push() } else { NSCursor.pop() }
+        }
+    }
 }
 
 // MARK: - Excluded App Row
@@ -171,250 +429,5 @@ struct ExcludedAppRow: View {
             .help("Remove from exclude list")
         }
         .padding(.vertical, 2)
-    }
-}
-
-// MARK: - App Picker Sheet
-
-struct AppPickerSheet: View {
-    let installedApps: [AppInfo]
-    @ObservedObject var excludeList: ExcludeListManager
-    @Binding var isPresented: Bool
-    var onAppsChanged: () -> Void
-
-    @State private var searchText = ""
-    @State private var selectedTab = 0
-
-    private var filteredApps: [AppInfo] {
-        let available = installedApps.filter { !excludeList.contains(bundleID: $0.bundleID) }
-        if searchText.isEmpty {
-            return available
-        }
-        return available.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText) ||
-            $0.bundleID.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Add Application")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                Spacer()
-                Button("Done") { isPresented = false }
-                    .keyboardShortcut(.defaultAction)
-            }
-            .padding()
-
-            Divider()
-
-            // Tab picker: Applications / Search Folders
-            Picker("", selection: $selectedTab) {
-                Text("Applications").tag(0)
-                Text("Folders to Search").tag(1)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-
-            Divider()
-
-            if selectedTab == 0 {
-                appListTab
-            } else {
-                foldersTab
-            }
-        }
-        .frame(width: 520, height: 480)
-    }
-
-    // MARK: - Applications Tab
-
-    private var appListTab: some View {
-        VStack(spacing: 0) {
-            // Search field
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                TextField("Search applications...", text: $searchText)
-                    .textFieldStyle(.plain)
-                if !searchText.isEmpty {
-                    Button(action: { searchText = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(8)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(8)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-
-            Divider()
-
-            Button(action: browseForApp) {
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .frame(width: 24, height: 24)
-                        .foregroundColor(.secondary)
-
-                    Text("Manually Add Application")
-                        .fontWeight(.medium)
-
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            Divider()
-
-            if installedApps.isEmpty {
-                VStack(spacing: 8) {
-                    Spacer()
-                    ProgressView("Loading applications...")
-                    Text("Applications are indexed the first time the app is opened and when new folders are added. This may take a few moments.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 300)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if filteredApps.isEmpty {
-                VStack {
-                    Spacer()
-                    Text("No matching applications")
-                        .foregroundColor(.secondary)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List {
-                    ForEach(filteredApps) { app in
-                        HStack {
-                            Image(nsImage: InstalledAppsFinder.icon(for: app))
-                                .resizable()
-                                .frame(width: 24, height: 24)
-
-                            VStack(alignment: .leading) {
-                                Text(app.name)
-                                    .fontWeight(.medium)
-                                Text(app.bundleID)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-
-                            Spacer()
-
-                            Button("Add") {
-                                excludeList.add(bundleID: app.bundleID)
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Search Folders Tab
-
-    private var foldersTab: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Additional application folders are scanned for .app bundles.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Spacer()
-                Button(action: addFolder) {
-                    Label("Add Folder", systemImage: "folder.badge.plus")
-                }
-                .buttonStyle(.bordered)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 10)
-
-            Divider()
-
-            // Default paths (non-removable)
-            List {
-                Section("Default Paths") {
-                    ForEach(InstalledAppsFinder.defaultSearchPaths, id: \.self) { path in
-                        HStack {
-                            Image(systemName: "folder")
-                                .foregroundColor(.secondary)
-                            Text(path)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Text("built-in")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                }
-
-                if !excludeList.additionalAppFolders.isEmpty {
-                    Section("Custom Paths") {
-                        ForEach(excludeList.additionalAppFolders, id: \.self) { path in
-                            HStack {
-                                Image(systemName: "folder.fill")
-                                    .foregroundColor(.accentColor)
-                                Text(path)
-                                Spacer()
-                                Button(action: {
-                                    excludeList.removeFolder(path)
-                                    onAppsChanged()
-                                }) {
-                                    Image(systemName: "minus.circle.fill")
-                                        .foregroundColor(.red)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func browseForApp() {
-        let panel = NSOpenPanel()
-        panel.title = "Select an Application"
-        panel.allowedContentTypes = [.applicationBundle]
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.directoryURL = URL(fileURLWithPath: "/Applications")
-
-        guard panel.runModal() == .OK else { return }
-
-        for url in panel.urls {
-            if let app = InstalledAppsFinder.appInfo(from: url) {
-                excludeList.add(bundleID: app.bundleID)
-            }
-        }
-        onAppsChanged()
-    }
-
-    private func addFolder() {
-        let panel = NSOpenPanel()
-        panel.title = "Select Applications Folder"
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        excludeList.addFolder(url.path)
-        onAppsChanged()
     }
 }

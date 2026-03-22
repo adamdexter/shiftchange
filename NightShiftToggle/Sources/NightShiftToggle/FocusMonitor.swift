@@ -9,6 +9,9 @@ final class FocusMonitor: ObservableObject {
     @Published var currentBundleID: String = ""
     @Published var nightShiftOverridden: Bool = false
 
+    /// Called when status changes so the menu bar can update.
+    var onStatusChange: (() -> Void)?
+
     private var observer: NSObjectProtocol?
     private weak var excludeList: ExcludeListManager?
     private let nightShift = NightShiftManager.shared
@@ -62,6 +65,8 @@ final class FocusMonitor: ObservableObject {
             nightShift.restoreIfNeeded()
             nightShiftOverridden = false
         }
+
+        onStatusChange?()
     }
 
     deinit {
