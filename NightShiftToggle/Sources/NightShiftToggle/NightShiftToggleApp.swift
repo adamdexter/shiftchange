@@ -148,12 +148,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         // Open the Settings window
         if #available(macOS 14.0, *) {
-            NSApplication.shared.mainMenu?.items
-                .first(where: { $0.submenu?.items.contains(where: { $0.action == #selector(NSApplication.showSettingsWindow) }) != nil })?
-                .submenu?.items
-                .first(where: { $0.action == #selector(NSApplication.showSettingsWindow) })?
-                .target?.perform(#selector(NSApplication.showSettingsWindow))
-                ?? NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
         } else {
             NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
         }
@@ -169,7 +164,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             forName: NSWindow.willCloseNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 let visibleWindows = NSApplication.shared.windows.filter { $0.isVisible && $0.level == .normal }
                 if visibleWindows.isEmpty {
