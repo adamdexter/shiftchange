@@ -70,6 +70,27 @@ That's it. Set it and forget it.
 
 ## Installation
 
+### Homebrew (recommended)
+
+Install via [Homebrew](https://brew.sh/) with a single command:
+
+```bash
+brew tap adamdexter/shiftchange
+brew install --cask shiftchange
+```
+
+To update to the latest version:
+
+```bash
+brew upgrade --cask shiftchange
+```
+
+To uninstall:
+
+```bash
+brew uninstall --cask shiftchange
+```
+
 ### Download the DMG
 
 1. Download the latest `ShiftChange-x.x.x.dmg` from [Releases](../../releases)
