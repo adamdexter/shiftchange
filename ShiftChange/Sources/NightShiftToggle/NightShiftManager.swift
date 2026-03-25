@@ -29,19 +29,20 @@ final class NightShiftManager {
     }
 
     /// Disable Night Shift because an excluded app gained focus.
-    /// Records whether to restore it later based on whether the display
-    /// is actually being warmed right now — not just whether a schedule exists.
+    /// Only records a restore if Night Shift was actually enabled (manual
+    /// toggle or schedule-triggered). A configured schedule alone does not
+    /// count — otherwise we'd force-enable Night Shift outside schedule hours.
     func disableForExcludedApp() {
-        let wasActive = isActive
-        shouldRestoreOnFocusChange = wasActive
+        let wasEnabled = isEnabled
+        shouldRestoreOnFocusChange = wasEnabled
 
-        if wasActive {
+        if wasEnabled {
             CBlueLightBridge.setNightShiftEnabled(false)
         }
         isOverriding = true
     }
 
-    /// Re-enable Night Shift if it was actively warming before we overrode it.
+    /// Re-enable Night Shift if it was enabled before we overrode it.
     func restoreIfNeeded() {
         guard isOverriding else { return }
 

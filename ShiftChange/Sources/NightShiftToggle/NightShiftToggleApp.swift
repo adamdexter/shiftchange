@@ -361,6 +361,10 @@ struct AboutView: View {
                 .font(.title)
                 .fontWeight(.bold)
 
+            Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev")")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+
             // Credits
             VStack(spacing: 4) {
                 HStack(spacing: 0) {
