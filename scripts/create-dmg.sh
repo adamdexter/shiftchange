@@ -4,11 +4,17 @@ set -euo pipefail
 # ── Configuration ──────────────────────────────────────────────────
 APP_NAME="ShiftChange"
 BUNDLE_ID="net.adamdexter.ShiftChange"
-VERSION="${1:-1.0.0}"
-DMG_NAME="${APP_NAME}-${VERSION}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PKG_DIR="${PROJECT_DIR}/ShiftChange"
+VERSION_FILE="${PKG_DIR}/Sources/NightShiftToggle/Resources/VERSION"
+if [ -f "$VERSION_FILE" ]; then
+    DEFAULT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
+else
+    DEFAULT_VERSION="1.0.0"
+fi
+VERSION="${1:-$DEFAULT_VERSION}"
+DMG_NAME="${APP_NAME}-${VERSION}"
 BUILD_DIR="${PKG_DIR}/.build-dmg"
 APP_BUNDLE="${BUILD_DIR}/${APP_NAME}.app"
 DMG_TEMP="${BUILD_DIR}/${DMG_NAME}-temp.dmg"

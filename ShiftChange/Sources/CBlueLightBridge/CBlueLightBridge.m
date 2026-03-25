@@ -61,6 +61,23 @@ typedef struct {
     return status.enabled;
 }
 
++ (BOOL)isNightShiftActive {
+    id client = [self sharedClient];
+    if (!client) return NO;
+
+    BlueLightStatus status = {0};
+    SEL sel = NSSelectorFromString(@"getBlueLightStatus:");
+    if (![client respondsToSelector:sel]) {
+        return NO;
+    }
+
+    BOOL (*getStatus)(id, SEL, BlueLightStatus *) =
+        (BOOL (*)(id, SEL, BlueLightStatus *))objc_msgSend;
+    getStatus(client, sel, &status);
+
+    return status.active;
+}
+
 + (void)setNightShiftEnabled:(BOOL)enabled {
     id client = [self sharedClient];
     if (!client) return;

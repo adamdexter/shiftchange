@@ -347,6 +347,19 @@ extension AppDelegate: NSWindowDelegate {
 // MARK: - About View
 
 struct AboutView: View {
+    static let appVersion: String = {
+        // Read from the bundled VERSION file (single source of truth)
+        if let url = Bundle.module.url(forResource: "VERSION", withExtension: nil),
+           let contents = try? String(contentsOf: url, encoding: .utf8) {
+            return contents.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // Fall back to Info.plist (set by create-dmg.sh in .app bundles)
+        if let plistVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
+            return plistVersion
+        }
+        return "unknown"
+    }()
+
     var body: some View {
         VStack(spacing: 16) {
             // App icon
@@ -360,6 +373,10 @@ struct AboutView: View {
             Text("ShiftChange")
                 .font(.title)
                 .fontWeight(.bold)
+
+            Text("Version \(Self.appVersion)")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
 
             // Credits
             VStack(spacing: 4) {
