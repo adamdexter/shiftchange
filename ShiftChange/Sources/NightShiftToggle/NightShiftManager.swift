@@ -13,9 +13,14 @@ final class NightShiftManager {
 
     private init() {}
 
-    /// Current Night Shift enabled state.
+    /// Current Night Shift enabled state (manual toggle).
     var isEnabled: Bool {
         CBlueLightBridge.isNightShiftEnabled()
+    }
+
+    /// Whether Night Shift is actively warming the display right now.
+    var isActive: Bool {
+        CBlueLightBridge.isNightShiftActive()
     }
 
     /// Whether a Night Shift schedule is configured.
@@ -24,19 +29,19 @@ final class NightShiftManager {
     }
 
     /// Disable Night Shift because an excluded app gained focus.
-    /// Records whether to restore it later.
+    /// Records whether to restore it later based on whether the display
+    /// is actually being warmed right now — not just whether a schedule exists.
     func disableForExcludedApp() {
-        let wasEnabled = isEnabled
-        let hasSchedule = isScheduled
-        shouldRestoreOnFocusChange = wasEnabled || hasSchedule
+        let wasActive = isActive
+        shouldRestoreOnFocusChange = wasActive
 
-        if wasEnabled {
+        if wasActive {
             CBlueLightBridge.setNightShiftEnabled(false)
         }
         isOverriding = true
     }
 
-    /// Re-enable Night Shift if it was on before we overrode it.
+    /// Re-enable Night Shift if it was actively warming before we overrode it.
     func restoreIfNeeded() {
         guard isOverriding else { return }
 

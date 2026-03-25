@@ -6,8 +6,11 @@ NS_ASSUME_NONNULL_BEGIN
 /// All methods dynamically load the framework at runtime.
 @interface CBlueLightBridge : NSObject
 
-/// Returns YES if Night Shift is currently enabled.
+/// Returns YES if Night Shift is currently enabled (manual toggle or schedule-triggered).
 + (BOOL)isNightShiftEnabled;
+
+/// Returns YES if Night Shift is actively warming the display right now.
++ (BOOL)isNightShiftActive;
 
 /// Enable or disable Night Shift.
 + (void)setNightShiftEnabled:(BOOL)enabled;
