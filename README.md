@@ -127,8 +127,10 @@ The binary will be at `.build/release/ShiftChange`.
 To build a distributable `.dmg`:
 
 ```bash
-./scripts/create-dmg.sh 1.0.0
+./scripts/create-dmg.sh
 ```
+
+The version is read automatically from `ShiftChange/Sources/NightShiftToggle/Resources/VERSION`.
 
 ## Requirements
 
@@ -150,6 +152,10 @@ Anyone who uses Night Shift **and** works with color-sensitive applications:
 ShiftChange uses Apple's private `CoreBrightness` framework (`CBBlueLightClient`) to control Night Shift programmatically. It monitors `NSWorkspace.didActivateApplicationNotification` to detect app focus changes and toggles Night Shift accordingly.
 
 The app runs as a menu bar accessory (`LSUIElement`) with no Dock icon during normal operation. The settings window activates the Dock icon temporarily for a natural macOS experience.
+
+## Updates
+
+See the [Releases](../../releases) page for the full changelog.
 
 ## Credits
 
