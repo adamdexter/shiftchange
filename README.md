@@ -70,7 +70,21 @@ That's it. Set it and forget it.
 
 ## Installation
 
-### Homebrew (recommended)
+### Quick Install (curl)
+
+Install the latest release with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/adamdexter/shiftchange/main/scripts/install.sh | sh
+```
+
+This downloads the latest DMG from GitHub Releases, mounts it, and copies ShiftChange to `/Applications`. If you need elevated permissions (e.g., a managed Mac), prefix with `sudo`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/adamdexter/shiftchange/main/scripts/install.sh | sudo sh
+```
+
+### Homebrew
 
 Install via [Homebrew](https://brew.sh/) with a single command:
 
