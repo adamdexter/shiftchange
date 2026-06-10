@@ -9,7 +9,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// Returns YES if Night Shift is currently enabled (manual toggle or schedule-triggered).
 + (BOOL)isNightShiftEnabled;
 
-/// Returns YES if Night Shift is actively warming the display right now.
+/// Returns YES if the Night Shift feature is running/monitoring — true whenever
+/// a schedule is configured, even outside warming hours. This does NOT mean the
+/// display is currently warmed; use isNightShiftEnabled for that.
 + (BOOL)isNightShiftActive;
 
 /// Enable or disable Night Shift.

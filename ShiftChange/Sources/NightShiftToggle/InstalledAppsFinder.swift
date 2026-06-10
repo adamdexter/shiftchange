@@ -24,10 +24,14 @@ enum InstalledAppsFinder {
 
     /// Scans default paths + any additional custom paths for .app bundles.
     static func findAll(extraPaths: [String] = []) -> [AppInfo] {
+        scan(paths: defaultSearchPaths + extraPaths)
+    }
+
+    /// Scans the given paths for .app bundles, deduplicated by bundle ID.
+    static func scan(paths allPaths: [String]) -> [AppInfo] {
         var apps: [AppInfo] = []
         var seenBundleIDs = Set<String>()
 
-        let allPaths = defaultSearchPaths + extraPaths
         let fileManager = FileManager.default
 
         for basePath in allPaths {

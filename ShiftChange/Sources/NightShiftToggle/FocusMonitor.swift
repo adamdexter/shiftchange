@@ -14,7 +14,11 @@ final class FocusMonitor: ObservableObject {
 
     private var observer: NSObjectProtocol?
     private weak var excludeList: ExcludeListManager?
-    private let nightShift = NightShiftManager.shared
+    private let nightShift: NightShiftManager
+
+    init(nightShift: NightShiftManager = .shared) {
+        self.nightShift = nightShift
+    }
 
     func start(excludeList: ExcludeListManager) {
         self.excludeList = excludeList
@@ -48,9 +52,15 @@ final class FocusMonitor: ObservableObject {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
                 as? NSRunningApplication else { return }
 
-        let bundleID = app.bundleIdentifier ?? ""
-        let appName = app.localizedName ?? ""
+        handleFocusChange(
+            bundleID: app.bundleIdentifier ?? "",
+            appName: app.localizedName ?? ""
+        )
+    }
 
+    /// Core focus-change logic, separated from the notification plumbing
+    /// so it can be exercised directly in tests.
+    func handleFocusChange(bundleID: String, appName: String) {
         currentAppName = appName
         currentBundleID = bundleID
 

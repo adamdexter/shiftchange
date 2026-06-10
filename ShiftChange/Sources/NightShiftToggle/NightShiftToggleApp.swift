@@ -252,6 +252,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         window.center()
         window.isReleasedWhenClosed = false
         window.level = .floating
+        window.delegate = self
 
         self.aboutWindow = window
 
@@ -337,9 +338,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
 extension AppDelegate: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
-        // Hide from Dock when settings window closes
-        DispatchQueue.main.async {
-            NSApplication.shared.setActivationPolicy(.accessory)
+        // Hide from Dock once no app windows (settings/about) remain visible
+        DispatchQueue.main.async { [weak self] in
+            let settingsVisible = self?.settingsWindow?.isVisible ?? false
+            let aboutVisible = self?.aboutWindow?.isVisible ?? false
+            if !settingsVisible && !aboutVisible {
+                NSApplication.shared.setActivationPolicy(.accessory)
+            }
         }
     }
 }
