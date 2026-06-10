@@ -77,7 +77,7 @@ When an excluded app gains focus, we only disable and later restore Night Shift 
 
 When making changes:
 
-1. **Increment the version** in `ShiftChange/Sources/NightShiftToggle/Resources/VERSION` for any user-facing change. This is the single source of truth — the About screen and `create-dmg.sh` both read from it, and the release workflow fails if the git tag doesn't match it.
+1. **Increment the version** in `ShiftChange/Sources/NightShiftToggle/Resources/VERSION` for any user-facing change. This is the single source of truth — the About screen, `create-dmg.sh`, and the release workflow all read from it.
 2. **Run the test suite** (`swift test`) — CI also runs it on every push.
 3. **Regression test Night Shift toggling on real hardware** after any change to `NightShiftManager.swift`, `FocusMonitor.swift`, or `CBlueLightBridge.m` (unit tests cover the state machine but not the real private framework):
    - Switch to an excluded app while Night Shift IS warming (after sunset) → Night Shift should disable; switching back should restore it
@@ -85,7 +85,7 @@ When making changes:
    - Switch to an excluded app while Night Shift is NOT warming (before sunset, with schedule) → nothing should change in either direction; "Turn On Until Sunrise" must NOT get toggled
    - Switch to an excluded app with Night Shift off and no schedule → nothing should change
    - Quit the app while overriding → Night Shift should restore
-4. **Release:** merge to `main`, then push tag `v<VERSION>`. The release workflow (`.github/workflows/release.yml`) builds the DMG, creates the GitHub release, and updates the Homebrew cask automatically. (Manual fallback: `./scripts/create-dmg.sh` then `gh release create v<VERSION> ./ShiftChange-<VERSION>.dmg --title "ShiftChange <VERSION>" --notes "<changelog>"`.)
+4. **Release:** merge to `main` with the bumped VERSION file. The release workflow (`.github/workflows/release.yml`) triggers on VERSION changes to main, builds the DMG, creates the `v<VERSION>` tag and GitHub release, and updates the Homebrew cask automatically. It skips silently if the version is already tagged, so a re-run is always safe. (Manual fallback: `./scripts/create-dmg.sh` then `gh release create v<VERSION> ./ShiftChange-<VERSION>.dmg --title "ShiftChange <VERSION>" --notes "<changelog>"`.)
 
 ## Distribution
 

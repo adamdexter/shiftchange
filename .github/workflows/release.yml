@@ -1,16 +1,20 @@
 name: Release
 
+# A release is published whenever the VERSION file changes on main (the
+# release action creates the matching v<VERSION> tag). Changes to this
+# workflow also trigger a run, but the already-released guard makes that a
+# no-op unless the VERSION is new. workflow_dispatch allows manual re-runs.
 on:
   push:
-    tags:
-      - 'v*'
-  # Manual trigger for releasing without pushing a tag; the release step
-  # creates the tag at the dispatched commit.
+    branches: [main]
+    paths:
+      - 'ShiftChange/Sources/NightShiftToggle/Resources/VERSION'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g. 1.1.1) — must match the VERSION file'
-        required: true
+        description: 'Version to release (must match the VERSION file)'
+        required: false
 
 permissions:
   contents: write
@@ -22,35 +26,42 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Extract version
+      - name: Determine version
         id: version
         run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Verify tag matches VERSION file
-        run: |
           FILE_VERSION=$(tr -d '[:space:]' < ShiftChange/Sources/NightShiftToggle/Resources/VERSION)
-          if [ "$FILE_VERSION" != "${{ steps.version.outputs.VERSION }}" ]; then
-            echo "::error::Tag is v${{ steps.version.outputs.VERSION }} but the bundled VERSION file says $FILE_VERSION. The About screen reads the VERSION file, so these must match. Update ShiftChange/Sources/NightShiftToggle/Resources/VERSION and re-tag."
+          REQUESTED="${{ github.event.inputs.version }}"
+          if [ -n "$REQUESTED" ] && [ "$REQUESTED" != "$FILE_VERSION" ]; then
+            echo "::error::Requested version $REQUESTED does not match the VERSION file ($FILE_VERSION). The About screen reads the VERSION file, so these must match."
             exit 1
+          fi
+          echo "VERSION=$FILE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if already released
+        id: check
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v${{ steps.version.outputs.VERSION }}" >/dev/null 2>&1; then
+            echo "v${{ steps.version.outputs.VERSION }} is already tagged — nothing to release."
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Build DMG
+        if: steps.check.outputs.should_release == 'true'
         run: |
           chmod +x scripts/create-dmg.sh
           scripts/create-dmg.sh "${{ steps.version.outputs.VERSION }}"
 
       - name: Compute SHA256
+        if: steps.check.outputs.should_release == 'true'
         id: sha
         run: |
           SHA=$(shasum -a 256 "ShiftChange-${{ steps.version.outputs.VERSION }}.dmg" | awk '{print $1}')
           echo "SHA256=$SHA" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
+        if: steps.check.outputs.should_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.VERSION }}
@@ -62,6 +73,7 @@ jobs:
       # Runs after the release so the cask never points at a download that
       # doesn't exist yet.
       - name: Update Homebrew formula
+        if: steps.check.outputs.should_release == 'true'
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           SHA="${{ steps.sha.outputs.SHA256 }}"
@@ -75,8 +87,8 @@ jobs:
             exit 0
           fi
           git commit -m "Update Homebrew cask to v$VERSION"
-          # Tag checkouts are detached HEAD; rebase onto current main so the
-          # push is a fast-forward even if main moved since tagging.
+          # Rebase onto current main so the push is a fast-forward even if
+          # main moved during the build.
           git fetch origin main
           git rebase origin/main
           git push origin HEAD:main
