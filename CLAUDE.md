@@ -87,6 +87,20 @@ When making changes:
    - Quit the app while overriding → Night Shift should restore
 4. **Release:** merge to `main` with the bumped VERSION file. The release workflow (`.github/workflows/release.yml`) triggers on VERSION changes to main, builds the DMG, creates the `v<VERSION>` tag and GitHub release, and updates the Homebrew cask automatically. It skips silently if the version is already tagged, so a re-run is always safe. (Manual fallback: `./scripts/create-dmg.sh` then `gh release create v<VERSION> ./ShiftChange-<VERSION>.dmg --title "ShiftChange <VERSION>" --notes "<changelog>"`.)
 
+## Code Signing & Notarization
+
+The release workflow signs and notarizes the DMG when these GitHub Actions secrets are configured (Settings → Secrets and variables → Actions). If they're missing, the release still publishes — unsigned, with a warning in the run log.
+
+| Secret | Contents |
+|---|---|
+| `MACOS_CERTIFICATE` | base64-encoded Developer ID Application certificate (.p12) |
+| `MACOS_CERTIFICATE_PASSWORD` | password set when exporting the .p12 |
+| `NOTARY_API_KEY` | contents of the App Store Connect API key (.p8) |
+| `NOTARY_KEY_ID` | App Store Connect API key ID |
+| `NOTARY_ISSUER_ID` | App Store Connect issuer UUID |
+
+For local signed builds, `create-dmg.sh` honors `CODESIGN_IDENTITY` (a "Developer ID Application: ..." identity) and notarizes when `NOTARY_KEY_PATH`, `NOTARY_KEY_ID`, and `NOTARY_ISSUER_ID` are set. With none set, it builds unsigned exactly as before.
+
 ## Distribution
 
 - **Homebrew:** `brew tap adamdexter/shiftchange && brew install --cask shiftchange`

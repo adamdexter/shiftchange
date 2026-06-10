@@ -88,6 +88,18 @@ PLIST
 
 echo "==> ${APP_NAME}.app created."
 
+# ── 2b. Code sign the app (optional) ──────────────────────────────
+# Set CODESIGN_IDENTITY to a "Developer ID Application: ..." identity to
+# sign. Hardened runtime + secure timestamp are required for notarization.
+if [ -n "${CODESIGN_IDENTITY:-}" ]; then
+    echo "==> Code signing ${APP_NAME}.app as '${CODESIGN_IDENTITY}'..."
+    codesign --force --options runtime --timestamp \
+        --sign "$CODESIGN_IDENTITY" "$APP_BUNDLE"
+    codesign --verify --strict --verbose=2 "$APP_BUNDLE"
+else
+    echo "==> CODESIGN_IDENTITY not set — skipping code signing (app will be unsigned)."
+fi
+
 # ── 3. Generate DMG background ────────────────────────────────────
 echo "==> Generating DMG background image..."
 
@@ -300,6 +312,27 @@ echo "==> Compressing final DMG..."
 hdiutil convert "$DMG_TEMP" -format UDZO -imagekey zlib-level=9 -o "$DMG_FINAL" 2>/dev/null
 
 rm -f "$DMG_TEMP"
+
+# ── 6. Sign & notarize the DMG (optional) ─────────────────────────
+if [ -n "${CODESIGN_IDENTITY:-}" ]; then
+    echo "==> Signing DMG..."
+    codesign --force --timestamp --sign "$CODESIGN_IDENTITY" "$DMG_FINAL"
+fi
+
+# Requires an App Store Connect API key: NOTARY_KEY_PATH (.p8 file),
+# NOTARY_KEY_ID, and NOTARY_ISSUER_ID.
+if [ -n "${NOTARY_KEY_PATH:-}" ] && [ -n "${NOTARY_KEY_ID:-}" ] && [ -n "${NOTARY_ISSUER_ID:-}" ]; then
+    echo "==> Submitting DMG for notarization (this can take a few minutes)..."
+    xcrun notarytool submit "$DMG_FINAL" \
+        --key "$NOTARY_KEY_PATH" \
+        --key-id "$NOTARY_KEY_ID" \
+        --issuer "$NOTARY_ISSUER_ID" \
+        --wait
+    echo "==> Stapling notarization ticket to DMG..."
+    xcrun stapler staple "$DMG_FINAL"
+else
+    echo "==> Notary credentials not set — skipping notarization."
+fi
 
 echo ""
 echo "==================================================="
