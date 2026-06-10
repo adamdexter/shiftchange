@@ -29,19 +29,32 @@ ShiftChange/
 │       └── Resources/
 │           ├── AppIcon.icns
 │           └── VERSION                # Single source of truth for app version
+├── Tests/
+│   └── ShiftChangeTests/          # XCTest suite (state machine, exclude list, app scanning)
 scripts/
 ├── create-dmg.sh                  # Builds .app bundle and DMG for distribution
 └── install.sh                     # curl-based installer (fetches latest GitHub release)
+.github/workflows/
+├── ci.yml                         # Build + test (macOS) and shellcheck, on every push/PR
+└── release.yml                    # Tag-triggered: builds DMG, creates release, updates cask
 ```
 
-## Build & Run
+## Build, Test & Run
 
 ```bash
 cd ShiftChange
 swift build -c release                  # Build binary
+swift test                              # Run the test suite
 .build/release/ShiftChange              # Run directly
 ../scripts/create-dmg.sh                # Build distributable DMG (reads version from Resources/VERSION)
 ```
+
+## Testing
+
+- Unit tests live in `ShiftChange/Tests/ShiftChangeTests/` and run via `swift test`, and automatically in CI (`.github/workflows/ci.yml`) on every push and pull request.
+- The Night Shift override state machine is tested against `FakeBlueLightClient` (a `BlueLightControlling` implementation in `Fakes.swift`). Tests do NOT exercise the real private CoreBrightness framework, so the manual regression checklist below is still required before releases.
+- Tests use isolated `UserDefaults` suites (`makeIsolatedDefaults()`) — never write to the standard defaults domain in tests.
+- When changing Night Shift logic, add or update a unit test pinning the behavior; the excluded→excluded restore-loss bug and the schedule-outside-hours rules are both pinned this way.
 
 ## Key Technical Details
 
@@ -53,22 +66,26 @@ The app uses Apple's **private** `CoreBrightness` framework via runtime dynamic 
 
 **Important:** `active` does NOT mean "display is currently being warmed." Use `enabled` to determine if Night Shift is actually shifting color temperature.
 
+Swift code should not call `CBlueLightBridge` directly — go through `NightShiftManager`, which wraps the bridge behind the `BlueLightControlling` protocol so logic stays testable.
+
 ### Night Shift Restore Logic
 When an excluded app gains focus, we only disable and later restore Night Shift if `enabled` was true. A configured schedule alone (`mode != 0`) is not sufficient — restoring based on schedule existence would force-enable Night Shift outside schedule hours (e.g., toggling "Turn On Until Sunrise" at 6pm when sunset is 7:25pm). This was a past bug — see commit history.
+
+`disableForExcludedApp()` must stay guarded against re-entry: when switching directly between two excluded apps, re-reading `isEnabled` would see the value we already set to false and drop the pending restore. This was also a past bug, now pinned by `testSwitchingBetweenExcludedAppsPreservesRestore`.
 
 ## Release Checklist
 
 When making changes:
 
-1. **Increment the version** in `ShiftChange/Sources/NightShiftToggle/Resources/VERSION` for any user-facing change. This is the single source of truth — the About screen and `create-dmg.sh` both read from it.
-2. **Regression test Night Shift toggling** after any change to `NightShiftManager.swift`, `FocusMonitor.swift`, or `CBlueLightBridge.m`:
+1. **Increment the version** in `ShiftChange/Sources/NightShiftToggle/Resources/VERSION` for any user-facing change. This is the single source of truth — the About screen and `create-dmg.sh` both read from it, and the release workflow fails if the git tag doesn't match it.
+2. **Run the test suite** (`swift test`) — CI also runs it on every push.
+3. **Regression test Night Shift toggling on real hardware** after any change to `NightShiftManager.swift`, `FocusMonitor.swift`, or `CBlueLightBridge.m` (unit tests cover the state machine but not the real private framework):
    - Switch to an excluded app while Night Shift IS warming (after sunset) → Night Shift should disable; switching back should restore it
+   - Switch between two excluded apps, then to a normal app → Night Shift should still restore
    - Switch to an excluded app while Night Shift is NOT warming (before sunset, with schedule) → nothing should change in either direction; "Turn On Until Sunrise" must NOT get toggled
    - Switch to an excluded app with Night Shift off and no schedule → nothing should change
    - Quit the app while overriding → Night Shift should restore
-3. **Build the DMG:** `./scripts/create-dmg.sh`
-4. **Create GitHub release:** `gh release create v<VERSION> ./ShiftChange-<VERSION>.dmg --title "ShiftChange <VERSION>" --notes "<changelog>"`
-5. **Update Homebrew tap** if applicable
+4. **Release:** merge to `main`, then push tag `v<VERSION>`. The release workflow (`.github/workflows/release.yml`) builds the DMG, creates the GitHub release, and updates the Homebrew cask automatically. (Manual fallback: `./scripts/create-dmg.sh` then `gh release create v<VERSION> ./ShiftChange-<VERSION>.dmg --title "ShiftChange <VERSION>" --notes "<changelog>"`.)
 
 ## Distribution
 

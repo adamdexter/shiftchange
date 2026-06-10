@@ -8,22 +8,25 @@ final class ExcludeListManager: ObservableObject {
     private static let excludeKey = "excludedAppBundleIDs"
     private static let foldersKey = "additionalAppFolders"
 
+    private let defaults: UserDefaults
+
     @Published var excludedBundleIDs: [String] = [] {
         didSet {
-            UserDefaults.standard.set(excludedBundleIDs, forKey: Self.excludeKey)
+            defaults.set(excludedBundleIDs, forKey: Self.excludeKey)
         }
     }
 
     /// Additional folders to scan for .app bundles (e.g. external drives).
     @Published var additionalAppFolders: [String] = [] {
         didSet {
-            UserDefaults.standard.set(additionalAppFolders, forKey: Self.foldersKey)
+            defaults.set(additionalAppFolders, forKey: Self.foldersKey)
         }
     }
 
-    init() {
-        self.excludedBundleIDs = UserDefaults.standard.stringArray(forKey: Self.excludeKey) ?? []
-        self.additionalAppFolders = UserDefaults.standard.stringArray(forKey: Self.foldersKey) ?? []
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.excludedBundleIDs = defaults.stringArray(forKey: Self.excludeKey) ?? []
+        self.additionalAppFolders = defaults.stringArray(forKey: Self.foldersKey) ?? []
     }
 
     func add(bundleID: String) {

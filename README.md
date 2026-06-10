@@ -13,6 +13,10 @@
   <a href="https://buymeacoffee.com/adamdexter">Buy Me a Coffee</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/adamdexter/shiftchange/actions/workflows/ci.yml"><img src="https://github.com/adamdexter/shiftchange/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+</p>
+
 ---
 
 Night Shift is great for reducing eye strain, but it wreaks havoc on color-critical work. If you use Photoshop, Lightroom, Premiere Pro, DaVinci Resolve, or any other app that depends on accurate color, you've probably been manually toggling Night Shift on and off dozens of times a day.
@@ -122,7 +126,13 @@ cd shiftchange/ShiftChange
 swift build -c release
 ```
 
-The binary will be at `.build/release/ShiftChange`.
+The binary will be at `.build/release/ShiftChange` and can be run directly.
+
+To run the test suite (also runs automatically in CI on every push and pull request):
+
+```bash
+swift test
+```
 
 To build a distributable `.dmg`:
 

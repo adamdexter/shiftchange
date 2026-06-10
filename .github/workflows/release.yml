@@ -13,11 +13,19 @@ jobs:
     runs-on: macos-14
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Verify tag matches VERSION file
+        run: |
+          FILE_VERSION=$(tr -d '[:space:]' < ShiftChange/Sources/NightShiftToggle/Resources/VERSION)
+          if [ "$FILE_VERSION" != "${{ steps.version.outputs.VERSION }}" ]; then
+            echo "::error::Tag is v${{ steps.version.outputs.VERSION }} but the bundled VERSION file says $FILE_VERSION. The About screen reads the VERSION file, so these must match. Update ShiftChange/Sources/NightShiftToggle/Resources/VERSION and re-tag."
+            exit 1
+          fi
 
       - name: Build DMG
         run: |
@@ -30,6 +38,15 @@ jobs:
           SHA=$(shasum -a 256 "ShiftChange-${{ steps.version.outputs.VERSION }}.dmg" | awk '{print $1}')
           echo "SHA256=$SHA" >> $GITHUB_OUTPUT
 
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ShiftChange-${{ steps.version.outputs.VERSION }}.dmg
+          generate_release_notes: true
+          draft: false
+
+      # Runs after the release so the cask never points at a download that
+      # doesn't exist yet.
       - name: Update Homebrew formula
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
@@ -39,12 +56,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add HomebrewFormula/shiftchange.rb
-          git commit -m "Update Homebrew cask to v$VERSION" || true
-          git push origin HEAD:main || true
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ShiftChange-${{ steps.version.outputs.VERSION }}.dmg
-          generate_release_notes: true
-          draft: false
+          if git diff --cached --quiet; then
+            echo "Formula already up to date."
+            exit 0
+          fi
+          git commit -m "Update Homebrew cask to v$VERSION"
+          # Tag checkouts are detached HEAD; rebase onto current main so the
+          # push is a fast-forward even if main moved since tagging.
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main

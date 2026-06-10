@@ -21,5 +21,10 @@ let package = Package(
                 .process("Resources")
             ]
         ),
+        .testTarget(
+            name: "ShiftChangeTests",
+            dependencies: ["ShiftChange"],
+            path: "Tests/ShiftChangeTests"
+        ),
     ]
 )
