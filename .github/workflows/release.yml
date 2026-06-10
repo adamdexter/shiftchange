@@ -4,6 +4,13 @@ on:
   push:
     tags:
       - 'v*'
+  # Manual trigger for releasing without pushing a tag; the release step
+  # creates the tag at the dispatched commit.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.1.1) — must match the VERSION file'
+        required: true
 
 permissions:
   contents: write
@@ -15,9 +22,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Extract version from tag
+      - name: Extract version
         id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Verify tag matches VERSION file
         run: |
@@ -41,6 +53,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: ShiftChange ${{ steps.version.outputs.VERSION }}
           files: ShiftChange-${{ steps.version.outputs.VERSION }}.dmg
           generate_release_notes: true
           draft: false
