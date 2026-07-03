@@ -97,6 +97,9 @@ The bridge registers a `setStatusNotificationBlock:` handler (delivered on the m
 
 Known remaining edge: if an override spans the *end* of a schedule window (e.g. in Photoshop from 11pm past sunrise), the snapshotted restore intent re-enables Night Shift outside schedule hours when focus leaves. Detecting this would require parsing schedule times from the private status struct.
 
+### Appearance Guard (Auto Light/Dark coupling)
+On some macOS versions (confirmed on Sonoma 14.5; apparently decoupled on newer releases), the "Auto" appearance setting is tied to the Night Shift engine: toggling Night Shift flips the system Light/Dark theme as a side effect. The bridge guards every `setNightShiftEnabled:` call — it snapshots the theme (SkyLight `SLSGetAppearanceThemeLegacy`) and restores it (`SLSSetAppearanceThemeLegacy`) if it changes within ~3s of our toggle, checking at 0.3/1.2/3.0s with a generation counter so rapid toggles don't fight. The guard is behavior-neutral on OSes without the coupling (it only acts when a flip actually happens) and never touches theme changes made outside our own calls.
+
 ### Global Night Shift Toggle (menu bar)
 The menu bar has a "Turn On/Off Night Shift" item (`NightShiftManager.setGlobalEnabled(_:)`). Calling `setEnabled:` is the same thing System Settings' toggle does — when a schedule is configured, the OS itself handles the "until tomorrow / until sunset" scheduling.
 
@@ -117,6 +120,7 @@ When making changes:
    - Menu bar "Turn Off Night Shift" while warming → display unshifts; System Settings shows it off until the next schedule trigger
    - Menu bar toggle while an excluded app is in focus → display must NOT change; the chosen state applies when focus leaves the excluded app
    - Toggle Night Shift in System Settings/Control Center → menu status line and toggle title reflect the change
+   - With Appearance set to "Auto" (System Settings → Appearance), use the menu toggle and switch in/out of an excluded app → the Light/Dark theme must NOT change (macOS couples Auto appearance to Night Shift on some OS versions; the bridge's appearance guard must undo it)
    - Quit the app while overriding → Night Shift should restore
    - Launch the packaged .app from the DMG **with `.build` renamed away** — the baked-in fallback path makes dev-machine launch tests pass even when the packaged app is broken (CI's release smoke test also covers this)
 4. **Release:** merge to `main` with the bumped VERSION file. The release workflow (`.github/workflows/release.yml`) triggers on VERSION changes to main, builds the DMG, creates the `v<VERSION>` tag and GitHub release, and updates the Homebrew cask automatically. It skips silently if the version is already tagged, so a re-run is always safe. (Manual fallback: `./scripts/create-dmg.sh` then `gh release create v<VERSION> ./ShiftChange-<VERSION>.dmg --title "ShiftChange <VERSION>" --notes "<changelog>"`.)
