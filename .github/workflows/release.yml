@@ -142,3 +142,31 @@ jobs:
           git fetch origin main
           git rebase origin/main
           git push origin HEAD:main
+
+      # The tap brew actually installs from is the separate repo
+      # adamdexter/homebrew-shiftchange — updating HomebrewFormula/ in this
+      # repo alone leaves brew users pinned to the old version. Pushing there
+      # needs a PAT with write access to that repo, stored as TAP_PUSH_TOKEN.
+      - name: Update Homebrew tap repo
+        if: steps.check.outputs.should_release == 'true'
+        env:
+          TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          SHA: ${{ steps.sha.outputs.SHA256 }}
+        run: |
+          if [ -z "$TAP_PUSH_TOKEN" ]; then
+            echo "::warning::TAP_PUSH_TOKEN secret not set — Homebrew tap NOT updated."
+            echo "::warning::Copy HomebrewFormula/shiftchange.rb to adamdexter/homebrew-shiftchange Casks/shiftchange.rb manually, or brew users stay on the old version."
+            exit 0
+          fi
+          git clone "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/adamdexter/homebrew-shiftchange.git" tap
+          # Regenerate the cask from this repo's copy (already updated above)
+          sed -i '' "s/version \".*\"/version \"$VERSION\"/" HomebrewFormula/shiftchange.rb
+          sed -i '' "s/sha256 \".*\"/sha256 \"$SHA\"/" HomebrewFormula/shiftchange.rb
+          cp HomebrewFormula/shiftchange.rb tap/Casks/shiftchange.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/shiftchange.rb
+          git commit -m "Update shiftchange cask to v$VERSION" || echo "Tap already up to date"
+          git push

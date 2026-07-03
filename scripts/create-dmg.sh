@@ -23,10 +23,14 @@ DMG_FINAL="${PROJECT_DIR}/${DMG_NAME}.dmg"
 echo "==> Building ${APP_NAME} v${VERSION}..."
 
 # ── 1. Build release binary ───────────────────────────────────────
+# SHIFTCHANGE_SCRATCH_PATH overrides where SwiftPM builds (default: .build).
+# Useful when the repo lives in an iCloud-synced folder, where sync can
+# corrupt .build mid-build — see CLAUDE.md.
+SCRATCH_PATH="${SHIFTCHANGE_SCRATCH_PATH:-${PKG_DIR}/.build}"
 cd "$PKG_DIR"
-swift build -c release 2>&1
+swift build -c release --scratch-path "$SCRATCH_PATH" 2>&1
 
-BINARY="${PKG_DIR}/.build/release/ShiftChange"
+BINARY="${SCRATCH_PATH}/release/ShiftChange"
 if [ ! -f "$BINARY" ]; then
     echo "ERROR: Binary not found at ${BINARY}"
     exit 1
@@ -37,7 +41,7 @@ fi
 # this way: the bundle was named NightShiftToggle_ShiftChange.bundle (from
 # the old package name) AND `find` on the .build/release symlink couldn't
 # descend into it, so the copy below was silently skipped.
-RESOURCE_BUNDLE="${PKG_DIR}/.build/release/ShiftChange_ShiftChange.bundle"
+RESOURCE_BUNDLE="${SCRATCH_PATH}/release/ShiftChange_ShiftChange.bundle"
 if [ ! -d "$RESOURCE_BUNDLE" ]; then
     echo "ERROR: ${RESOURCE_BUNDLE} not found."
     echo "       The app would crash on launch without it. Did the package"

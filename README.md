@@ -63,6 +63,8 @@ That's it. Set it and forget it.
 ## Features
 
 - **Per-app Night Shift control** — disable Night Shift only when specific apps are in focus
+- **Global Night Shift toggle** — turn Night Shift on or off system-wide right from the menu bar, exactly like the System Settings toggle ("Turn Off Until Tomorrow" / "Turn On Until Sunset"). Per-app switching keeps working either way
+- **Schedule-aware** — if your Night Shift schedule kicks in while a color-critical app is in focus, the display stays unshifted until you switch away
 - **Menu bar app** — runs quietly out of the way with a status icon
 - **Instant switching** — Night Shift toggles the moment you switch apps, no delay
 - **Smart restore** — respects your existing Night Shift schedule; restores it when you leave an excluded app
@@ -140,7 +142,7 @@ To build a distributable `.dmg`:
 ./scripts/create-dmg.sh
 ```
 
-The version is read automatically from `ShiftChange/Sources/NightShiftToggle/Resources/VERSION`.
+The version is read automatically from `ShiftChange/Sources/ShiftChange/Resources/VERSION`.
 
 ## Requirements
 
