@@ -177,5 +177,3 @@ Made out of necessity and with love by [Adam Dexter](https://adamdexter.net/) an
   If ShiftChange has been useful to you, consider
   <a href="https://buymeacoffee.com/adamdexter">buying me a coffee</a>!
 </p>
-</content>
-</invoke>

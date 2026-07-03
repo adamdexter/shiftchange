@@ -99,14 +99,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 window.close()
                 return .terminateCancel
             } else {
-                // Quit: actually terminate
-                focusMonitor.stop()
+                // Quit: actually terminate (monitor stops in applicationWillTerminate)
                 return .terminateNow
             }
         }
 
         // No window open — quit directly (e.g. from menu bar Quit)
-        focusMonitor.stop()
         return .terminateNow
     }
 
@@ -306,7 +304,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     @objc private func quitApp() {
-        focusMonitor.stop()
+        // Monitor teardown happens in applicationWillTerminate, so choosing
+        // "Minimize to Menu Bar" in the confirm dialog keeps monitoring alive.
         NSApplication.shared.terminate(nil)
     }
 
