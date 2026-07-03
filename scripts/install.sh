@@ -46,13 +46,22 @@ LATEST_URL="https://api.github.com/repos/${REPO}/releases/latest"
 RELEASE_JSON=$(curl -fsSL "$LATEST_URL") || error "Failed to fetch release info from GitHub."
 
 # Extract the DMG download URL
-DMG_URL=$(printf '%s' "$RELEASE_JSON" | grep -o '"browser_download_url":\s*"[^"]*\.dmg"' | head -1 | sed 's/.*"browser_download_url":\s*"//;s/"$//')
+# POSIX character classes only — BSD grep/sed on macOS don't support \s
+# (grep tolerates it, sed silently fails to strip, yielding malformed URLs).
+DMG_URL=$(printf '%s' "$RELEASE_JSON" \
+    | grep -o '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*\.dmg"' \
+    | head -1 \
+    | sed 's/.*"\(https[^"]*\)".*/\1/')
 
-if [ -z "$DMG_URL" ]; then
-    error "No DMG found in the latest release. Please install manually from https://github.com/${REPO}/releases"
-fi
+case "$DMG_URL" in
+    https://*) ;;
+    *) error "Could not parse the DMG download URL from the GitHub API response. Please install manually from https://github.com/${REPO}/releases" ;;
+esac
 
-VERSION=$(printf '%s' "$RELEASE_JSON" | grep -o '"tag_name":\s*"[^"]*"' | head -1 | sed 's/.*"tag_name":\s*"//;s/"$//')
+VERSION=$(printf '%s' "$RELEASE_JSON" \
+    | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' \
+    | head -1 \
+    | sed 's/.*"\([^"]*\)"$/\1/')
 info "Latest version: ${VERSION}"
 
 # ── Download ──────────────────────────────────────────────────────
