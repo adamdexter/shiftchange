@@ -15,14 +15,15 @@
 ShiftChange/
 ├── Package.swift                  # Package name MUST stay "ShiftChange" — see Resource Bundle Naming
 ├── Sources/
-│   ├── CBlueLightBridge/          # Obj-C bridge to private CoreBrightness framework
-│   │   ├── CBlueLightBridge.m     # Dynamic loading of CBBlueLightClient
+│   ├── CBlueLightBridge/          # Obj-C bridge to private frameworks (CoreBrightness + SkyLight)
+│   │   ├── CBlueLightBridge.m     # CBBlueLightClient loading, status notifications, appearance guard
 │   │   └── include/
 │   │       └── CBlueLightBridge.h
 │   └── ShiftChange/               # Main Swift app
 │       ├── main.swift             # Entry point (pure AppKit, no SwiftUI App lifecycle)
-│       ├── ShiftChangeApp.swift   # AppDelegate, menu bar, About window
-│       ├── NightShiftManager.swift    # Night Shift enable/disable/restore logic
+│       ├── ShiftChangeApp.swift   # AppDelegate, menu bar (incl. global toggle), About window
+│       ├── AppResources.swift     # Resource bundle resolution — NEVER use Bundle.module directly
+│       ├── NightShiftManager.swift    # Override state machine, global toggle, external-change handling
 │       ├── FocusMonitor.swift         # NSWorkspace app focus observer
 │       ├── ExcludeListManager.swift   # User's excluded app list (UserDefaults)
 │       ├── InstalledAppsFinder.swift  # Scans /Applications etc. for .app bundles
@@ -60,6 +61,38 @@ spurious SDK-mismatch errors, plus stray Finder-style duplicates like
 build). Work around it with `swift build --scratch-path /tmp/shiftchange-build`
 (`create-dmg.sh` honors `SHIFTCHANGE_SCRATCH_PATH` for the same purpose)
 or keep the repo outside iCloud-synced folders.
+
+## Agent Workflow Notes
+
+Hard-won constraints for working on this repo (each of these caused real
+lost time or a shipped bug at least once):
+
+- **Fetch first.** Run `git fetch` and diff against `origin/main` before any
+  audit or fix — this clone once sat 10 commits stale for weeks and a full
+  day of work was done against the wrong base.
+- **`swift test` needs full Xcode.** The primary dev machine has only
+  Command Line Tools, so XCTest is unavailable locally ("error: XCTest not
+  available"). To run the suite, push a branch — CI (`ci.yml`) builds and
+  tests on every push to any branch. Don't claim tests pass without a green
+  CI run.
+- **Pushing changes to `.github/workflows/` requires the `workflow` OAuth
+  scope** on the git/gh credential. If a push is rejected with "refusing to
+  allow an OAuth App to create or update workflow", run
+  `gh auth refresh -h github.com -s workflow` (interactive device flow —
+  the user must complete it in a browser).
+- **Verification honesty:** a packaged-app launch test on the machine that
+  built it proves nothing unless the build directory is renamed away first
+  (see Resource Bundle Naming). Downloading the actual published asset and
+  launching it is the gold standard.
+- **Merging a VERSION bump to main IS the release.** There is no separate
+  publish step — treat any branch that touches VERSION as a release
+  candidate.
+- **Convention:** work on `claude/*` branches, PR into main, merge commits
+  (not squash). Doc-only and script-only changes don't trigger a release
+  (the release workflow's path filter watches only VERSION and itself).
+- The GitHub contents API caches reads for a few minutes — a stale readback
+  right after a push does not mean the push failed; verify via the commits
+  API or a `?ref=<sha>` read. Same for raw.githubusercontent.com (~5 min).
 
 ## Testing
 
@@ -110,7 +143,7 @@ Override interplay: if an excluded app has focus, the toggle does NOT touch the 
 When making changes:
 
 1. **Increment the version** in `ShiftChange/Sources/ShiftChange/Resources/VERSION` for any user-facing change. This is the single source of truth — the About screen, `create-dmg.sh`, and the release workflow all read from it.
-2. **Run the test suite** (`swift test`) — CI also runs it on every push.
+2. **Run the test suite** — locally via `swift test` if full Xcode is installed; otherwise push the branch and let CI run it (see Agent Workflow Notes).
 3. **Regression test Night Shift toggling on real hardware** after any change to `NightShiftManager.swift`, `FocusMonitor.swift`, or `CBlueLightBridge.m` (unit tests cover the state machine but not the real private framework):
    - Switch to an excluded app while Night Shift IS warming (after sunset) → Night Shift should disable; switching back should restore it
    - Switch between two excluded apps, then to a normal app → Night Shift should still restore
@@ -123,7 +156,8 @@ When making changes:
    - With Appearance set to "Auto" (System Settings → Appearance), use the menu toggle and switch in/out of an excluded app → the Light/Dark theme must NOT change (macOS couples Auto appearance to Night Shift on some OS versions; the bridge's appearance guard must undo it)
    - Quit the app while overriding → Night Shift should restore
    - Launch the packaged .app from the DMG **with `.build` renamed away** — the baked-in fallback path makes dev-machine launch tests pass even when the packaged app is broken (CI's release smoke test also covers this)
-4. **Release:** merge to `main` with the bumped VERSION file. The release workflow (`.github/workflows/release.yml`) triggers on VERSION changes to main, builds the DMG, creates the `v<VERSION>` tag and GitHub release, and updates the Homebrew cask automatically. It skips silently if the version is already tagged, so a re-run is always safe. (Manual fallback: `./scripts/create-dmg.sh` then `gh release create v<VERSION> ./ShiftChange-<VERSION>.dmg --title "ShiftChange <VERSION>" --notes "<changelog>"`.)
+4. **Release:** merge to `main` with the bumped VERSION file. The release workflow (`.github/workflows/release.yml`) triggers on VERSION changes to main, builds and signs/notarizes the DMG, **smoke-tests the packaged app** (launches it from the DMG with `.build` hidden — release-blocking), creates the `v<VERSION>` tag and GitHub release, and updates the Homebrew cask copy + tap automatically. It skips silently if the version is already tagged, so a re-run is always safe. (Manual fallback: `./scripts/create-dmg.sh` then `gh release create v<VERSION> ./ShiftChange-<VERSION>.dmg --title "ShiftChange <VERSION>" --notes "<changelog>"`.)
+5. **After the run, check the "Update Homebrew tap repo" step** — it runs last, after the release, so the run can show a published release even if the tap push failed (403 = the `TAP_PUSH_TOKEN` PAT lacks Contents Read/Write on `homebrew-shiftchange`). If it failed, sync the tap manually: copy `HomebrewFormula/shiftchange.rb` to the tap repo's `Casks/shiftchange.rb`.
 
 ## Code Signing & Notarization
 
@@ -136,6 +170,7 @@ The release workflow signs and notarizes the DMG when these GitHub Actions secre
 | `NOTARY_API_KEY` | contents of the App Store Connect API key (.p8) |
 | `NOTARY_KEY_ID` | App Store Connect API key ID |
 | `NOTARY_ISSUER_ID` | App Store Connect issuer UUID |
+| `TAP_PUSH_TOKEN` | fine-grained PAT for pushing the cask to the tap repo — Repository access: `homebrew-shiftchange` only; Permissions: Contents Read and write |
 
 For local signed builds, `create-dmg.sh` honors `CODESIGN_IDENTITY` (a "Developer ID Application: ..." identity) and notarizes when `NOTARY_KEY_PATH`, `NOTARY_KEY_ID`, and `NOTARY_ISSUER_ID` are set. With none set, it builds unsigned exactly as before.
 
