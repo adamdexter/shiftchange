@@ -14,6 +14,44 @@ typedef struct {
     unsigned char _padding[508];
 } BlueLightStatus;
 
+#pragma mark - Appearance guard (SkyLight)
+
+// macOS couples the "Auto" appearance setting to the Night Shift engine:
+// toggling Night Shift can flip the system Light/Dark theme as a side
+// effect. Night Shift tinting and the theme are independent settings from
+// the user's point of view, so we snapshot the theme before our own
+// setEnabled: calls and restore it if it changes in the seconds after.
+// Scoped to OUR toggles only — theme changes made by the user or by the
+// schedule outside our calls are left alone.
+
+typedef BOOL (*SLSGetAppearanceThemeLegacyFunc)(void);
+typedef void (*SLSSetAppearanceThemeLegacyFunc)(BOOL);
+
+static SLSGetAppearanceThemeLegacyFunc slsGetTheme = NULL;
+static SLSSetAppearanceThemeLegacyFunc slsSetTheme = NULL;
+static NSUInteger themeGuardGeneration = 0;
+
+static void loadSkyLightIfNeeded(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        void *handle = dlopen(
+            "/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight",
+            RTLD_LAZY
+        );
+        if (!handle) {
+            NSLog(@"[ShiftChange] Failed to load SkyLight — appearance guard disabled");
+            return;
+        }
+        slsGetTheme = (SLSGetAppearanceThemeLegacyFunc)dlsym(handle, "SLSGetAppearanceThemeLegacy");
+        slsSetTheme = (SLSSetAppearanceThemeLegacyFunc)dlsym(handle, "SLSSetAppearanceThemeLegacy");
+        if (!slsGetTheme || !slsSetTheme) {
+            NSLog(@"[ShiftChange] SkyLight appearance symbols not found — appearance guard disabled");
+            slsGetTheme = NULL;
+            slsSetTheme = NULL;
+        }
+    });
+}
+
 @implementation CBlueLightBridge
 
 + (id _Nullable)sharedClient {
@@ -81,9 +119,35 @@ typedef struct {
         return;
     }
 
-    void (*setEnabled)(id, SEL, BOOL) =
+    // Snapshot the theme so the appearance guard can undo any Light/Dark
+    // flip this toggle causes (see the guard comment above).
+    loadSkyLightIfNeeded();
+    BOOL guardActive = (slsGetTheme != NULL && slsSetTheme != NULL);
+    BOOL themeBefore = guardActive ? slsGetTheme() : NO;
+    NSUInteger generation = ++themeGuardGeneration;
+
+    void (*setEnabledFn)(id, SEL, BOOL) =
         (void (*)(id, SEL, BOOL))objc_msgSend;
-    setEnabled(client, sel, enabled);
+    setEnabledFn(client, sel, enabled);
+
+    if (!guardActive) return;
+
+    // The appearance engine reacts asynchronously, so check a few times.
+    // A newer toggle supersedes this guard via the generation counter.
+    void (^restoreTheme)(void) = ^{
+        if (generation != themeGuardGeneration) return;
+        if (slsGetTheme() != themeBefore) {
+            NSLog(@"[ShiftChange] Night Shift toggle flipped the system appearance — restoring");
+            slsSetTheme(themeBefore);
+        }
+    };
+    for (NSNumber *delay in @[@0.3, @1.2, @3.0]) {
+        dispatch_after(
+            dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)),
+            dispatch_get_main_queue(),
+            restoreTheme
+        );
+    }
 }
 
 + (BOOL)isNightShiftScheduled {
