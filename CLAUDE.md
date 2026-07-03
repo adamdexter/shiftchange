@@ -70,8 +70,10 @@ or keep the repo outside iCloud-synced folders.
 
 ## Key Technical Details
 
-### Resource Bundle Naming (do not rename the package)
-SwiftPM names the resource bundle `<package>_<target>.bundle` — with both named `ShiftChange`, that's `ShiftChange_ShiftChange.bundle`. `Bundle.module` hard-crashes (fatalError) at launch if the bundle is missing from the packaged app, and `create-dmg.sh` resolves that exact path (and fails the build if absent). v1.0.0–v1.1.2 shipped without the bundle (package was still named `NightShiftToggle`, and the old `find` couldn't descend the `.build/release` symlink) and crashed on launch on every machine except the dev machine, where a baked-in fallback path to the local `.build` directory masked it.
+### Resource Bundle Naming & Loading (read before touching resources)
+SwiftPM names the resource bundle `<package>_<target>.bundle` — with both named `ShiftChange`, that's `ShiftChange_ShiftChange.bundle`. `create-dmg.sh` resolves that exact path (and fails the build if absent) and copies it into `Contents/Resources`.
+
+**Never use `Bundle.module` directly in app code — go through `AppResources.bundle`.** SwiftPM's generated accessor for *executable* targets only checks the .app ROOT (`Bundle.main.bundleURL`) and a baked-in absolute path into the build machine's `.build` directory; it never checks `Contents/Resources`, so `Bundle.module` fatalErrors at launch in the packaged app. This crashed every release from v1.0.0 through v1.2.0 — and passed every on-machine test, because on the build machine the baked-in `.build` fallback path exists. **Launch tests of the packaged app only count with the build directory renamed/hidden** (the release workflow's smoke-test step does this automatically).
 
 ### CoreBrightness Bridge
 The app uses Apple's **private** `CoreBrightness` framework via runtime dynamic loading (`dlopen`/`objc_msgSend`). The `BlueLightStatus` struct is reverse-engineered:
@@ -116,6 +118,7 @@ When making changes:
    - Menu bar toggle while an excluded app is in focus → display must NOT change; the chosen state applies when focus leaves the excluded app
    - Toggle Night Shift in System Settings/Control Center → menu status line and toggle title reflect the change
    - Quit the app while overriding → Night Shift should restore
+   - Launch the packaged .app from the DMG **with `.build` renamed away** — the baked-in fallback path makes dev-machine launch tests pass even when the packaged app is broken (CI's release smoke test also covers this)
 4. **Release:** merge to `main` with the bumped VERSION file. The release workflow (`.github/workflows/release.yml`) triggers on VERSION changes to main, builds the DMG, creates the `v<VERSION>` tag and GitHub release, and updates the Homebrew cask automatically. It skips silently if the version is already tagged, so a re-run is always safe. (Manual fallback: `./scripts/create-dmg.sh` then `gh release create v<VERSION> ./ShiftChange-<VERSION>.dmg --title "ShiftChange <VERSION>" --notes "<changelog>"`.)
 
 ## Code Signing & Notarization

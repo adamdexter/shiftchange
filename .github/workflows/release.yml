@@ -103,6 +103,30 @@ jobs:
           chmod +x scripts/create-dmg.sh
           scripts/create-dmg.sh "${{ steps.version.outputs.VERSION }}"
 
+      # Launch the app from the freshly built DMG with the build directory
+      # hidden. Bundle-loading fallback paths baked into the binary make the
+      # build machine lie about packaged-app health — the v1.0.0–v1.2.0
+      # launch crash passed every on-machine test this way.
+      - name: Smoke test packaged app
+        if: steps.check.outputs.should_release == 'true'
+        run: |
+          mv ShiftChange/.build /tmp/hidden-build
+          MOUNT=$(hdiutil attach -nobrowse -readonly "ShiftChange-${{ steps.version.outputs.VERSION }}.dmg" | grep -o '/Volumes/.*' | head -1)
+          "$MOUNT/ShiftChange.app/Contents/MacOS/ShiftChange" &
+          APP_PID=$!
+          sleep 5
+          if kill -0 "$APP_PID" 2>/dev/null; then
+            echo "Packaged app launched and stayed alive."
+            kill "$APP_PID" 2>/dev/null || true
+            RESULT=0
+          else
+            echo "::error::Packaged app crashed on launch — aborting release."
+            RESULT=1
+          fi
+          hdiutil detach "$MOUNT" -quiet || true
+          mv /tmp/hidden-build ShiftChange/.build
+          exit $RESULT
+
       - name: Compute SHA256
         if: steps.check.outputs.should_release == 'true'
         id: sha
