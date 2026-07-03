@@ -80,6 +80,11 @@ final class FocusMonitor: ObservableObject {
     }
 
     deinit {
-        stop()
+        // Don't call stop() here — it mutates @Published state, which must
+        // not happen while the object is deallocating.
+        if let observer = observer {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+        nightShift.restoreIfNeeded()
     }
 }

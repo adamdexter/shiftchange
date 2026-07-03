@@ -9,6 +9,7 @@ final class FakeBlueLightClient: BlueLightControlling {
     var active = false
     var scheduled = false
     private(set) var setEnabledCalls: [Bool] = []
+    private var statusChangeHandler: (() -> Void)?
 
     var isEnabled: Bool { enabled }
     var isActive: Bool { active }
@@ -17,6 +18,21 @@ final class FakeBlueLightClient: BlueLightControlling {
     func setEnabled(_ enabled: Bool) {
         setEnabledCalls.append(enabled)
         self.enabled = enabled
+        // The real framework notifies on every status change, including ones
+        // we caused ourselves. Firing synchronously here is deliberately
+        // stricter than production (which hops to the main queue) so tests
+        // catch re-entrancy bugs in the override state machine.
+        statusChangeHandler?()
+    }
+
+    func setStatusChangeHandler(_ handler: (() -> Void)?) {
+        statusChangeHandler = handler
+    }
+
+    /// Simulates an external status change (schedule trigger, System
+    /// Settings toggle): mutate `enabled` first, then call this.
+    func fireStatusChange() {
+        statusChangeHandler?()
     }
 }
 

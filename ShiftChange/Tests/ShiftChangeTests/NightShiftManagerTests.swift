@@ -97,4 +97,83 @@ final class NightShiftManagerTests: XCTestCase {
         manager.restoreIfNeeded()
         XCTAssertEqual(client.setEnabledCalls, [false, true])
     }
+
+    // MARK: - Global toggle (menu bar)
+
+    // Toggling globally with no override active goes straight to the client —
+    // same as the System Settings toggle.
+    func testGlobalToggleOffWhileNotOverriding() {
+        client.enabled = true
+        manager.setGlobalEnabled(false)
+        XCTAssertEqual(client.setEnabledCalls, [false])
+        XCTAssertFalse(manager.effectiveEnabled)
+    }
+
+    // Turning Night Shift ON from the menu while an excluded app has focus:
+    // the display must stay unshifted; the ON state applies on focus leave.
+    func testGlobalToggleOnWhileOverridingOnlyChangesRestoreIntent() {
+        client.enabled = false
+        client.scheduled = true
+        manager.disableForExcludedApp()
+        XCTAssertEqual(client.setEnabledCalls, [])
+        XCTAssertFalse(manager.effectiveEnabled)
+
+        manager.setGlobalEnabled(true)
+        XCTAssertEqual(client.setEnabledCalls, [], "Display must stay unshifted while an excluded app has focus")
+        XCTAssertTrue(manager.effectiveEnabled)
+
+        manager.restoreIfNeeded()
+        XCTAssertEqual(client.setEnabledCalls, [true])
+        XCTAssertTrue(client.enabled)
+    }
+
+    // Turning Night Shift OFF from the menu while overriding cancels the
+    // pending restore.
+    func testGlobalToggleOffWhileOverridingCancelsRestore() {
+        client.enabled = true
+        manager.disableForExcludedApp()
+        XCTAssertEqual(client.setEnabledCalls, [false])
+
+        manager.setGlobalEnabled(false)
+        manager.restoreIfNeeded()
+        XCTAssertEqual(client.setEnabledCalls, [false], "Restore must not re-enable after a global off")
+        XCTAssertFalse(client.enabled)
+    }
+
+    // MARK: - External status changes (schedule triggers, System Settings)
+
+    // Sunset fires while an excluded app is focused → Night Shift is
+    // immediately re-disabled; leaving the excluded app then enables it.
+    func testScheduleFiringWhileOverridingIsReDisabledAndRestoredLater() {
+        var changeCount = 0
+        manager.startObservingStatusChanges { changeCount += 1 }
+
+        client.enabled = false
+        client.scheduled = true
+        manager.disableForExcludedApp()
+        XCTAssertEqual(client.setEnabledCalls, [])
+
+        // Sunset: the schedule enables Night Shift externally
+        client.enabled = true
+        client.fireStatusChange()
+        XCTAssertEqual(client.setEnabledCalls, [false], "External enable must be immediately re-disabled")
+        XCTAssertFalse(client.enabled, "Display must stay unshifted")
+        XCTAssertTrue(manager.effectiveEnabled, "Restore intent must fold in the schedule's ON")
+        XCTAssertGreaterThan(changeCount, 0)
+
+        manager.restoreIfNeeded()
+        XCTAssertEqual(client.setEnabledCalls, [false, true], "Night Shift should come on after leaving the excluded app")
+        XCTAssertTrue(client.enabled)
+    }
+
+    // External changes with no override active only refresh the UI.
+    func testExternalChangeWhileNotOverridingOnlyNotifies() {
+        var changeCount = 0
+        manager.startObservingStatusChanges { changeCount += 1 }
+
+        client.enabled = true
+        client.fireStatusChange()
+        XCTAssertEqual(client.setEnabledCalls, [])
+        XCTAssertEqual(changeCount, 1)
+    }
 }

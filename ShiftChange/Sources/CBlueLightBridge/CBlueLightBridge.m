@@ -26,13 +26,13 @@ typedef struct {
             RTLD_LAZY
         );
         if (!handle) {
-            NSLog(@"[NightShiftToggle] Failed to load CoreBrightness framework");
+            NSLog(@"[ShiftChange] Failed to load CoreBrightness framework");
             return;
         }
 
         Class CBBlueLightClient = NSClassFromString(@"CBBlueLightClient");
         if (!CBBlueLightClient) {
-            NSLog(@"[NightShiftToggle] CBBlueLightClient class not found");
+            NSLog(@"[ShiftChange] CBBlueLightClient class not found");
             return;
         }
 
@@ -41,40 +41,33 @@ typedef struct {
     return client;
 }
 
-+ (BOOL)isNightShiftEnabled {
+/// Fetches the current status into *status. Returns NO if the client is
+/// unavailable or the call fails.
++ (BOOL)fetchStatus:(BlueLightStatus *)status {
     id client = [self sharedClient];
     if (!client) return NO;
 
-    BlueLightStatus status = {0};
-    // -getBlueLightStatus: takes a pointer to the status struct
     SEL sel = NSSelectorFromString(@"getBlueLightStatus:");
     if (![client respondsToSelector:sel]) {
-        NSLog(@"[NightShiftToggle] getBlueLightStatus: selector not found");
+        NSLog(@"[ShiftChange] getBlueLightStatus: selector not found");
         return NO;
     }
 
     // Use objc_msgSend to call the method with a struct pointer argument
     BOOL (*getStatus)(id, SEL, BlueLightStatus *) =
         (BOOL (*)(id, SEL, BlueLightStatus *))objc_msgSend;
-    getStatus(client, sel, &status);
+    return getStatus(client, sel, status);
+}
 
++ (BOOL)isNightShiftEnabled {
+    BlueLightStatus status = {0};
+    if (![self fetchStatus:&status]) return NO;
     return status.enabled;
 }
 
 + (BOOL)isNightShiftActive {
-    id client = [self sharedClient];
-    if (!client) return NO;
-
     BlueLightStatus status = {0};
-    SEL sel = NSSelectorFromString(@"getBlueLightStatus:");
-    if (![client respondsToSelector:sel]) {
-        return NO;
-    }
-
-    BOOL (*getStatus)(id, SEL, BlueLightStatus *) =
-        (BOOL (*)(id, SEL, BlueLightStatus *))objc_msgSend;
-    getStatus(client, sel, &status);
-
+    if (![self fetchStatus:&status]) return NO;
     return status.active;
 }
 
@@ -84,7 +77,7 @@ typedef struct {
 
     SEL sel = NSSelectorFromString(@"setEnabled:");
     if (![client respondsToSelector:sel]) {
-        NSLog(@"[NightShiftToggle] setEnabled: selector not found");
+        NSLog(@"[ShiftChange] setEnabled: selector not found");
         return;
     }
 
@@ -94,21 +87,43 @@ typedef struct {
 }
 
 + (BOOL)isNightShiftScheduled {
-    id client = [self sharedClient];
-    if (!client) return NO;
-
     BlueLightStatus status = {0};
-    SEL sel = NSSelectorFromString(@"getBlueLightStatus:");
-    if (![client respondsToSelector:sel]) {
-        return NO;
-    }
-
-    BOOL (*getStatus)(id, SEL, BlueLightStatus *) =
-        (BOOL (*)(id, SEL, BlueLightStatus *))objc_msgSend;
-    getStatus(client, sel, &status);
+    if (![self fetchStatus:&status]) return NO;
 
     // mode != 0 means a schedule is configured
     return status.mode != 0;
+}
+
+static void (^statusChangeHandler)(void) = nil;
+
++ (void)setStatusChangeHandler:(void (^ _Nullable)(void))handler {
+    statusChangeHandler = [handler copy];
+
+    id client = [self sharedClient];
+    if (!client) return;
+
+    SEL sel = NSSelectorFromString(@"setStatusNotificationBlock:");
+    if (![client respondsToSelector:sel]) {
+        NSLog(@"[ShiftChange] setStatusNotificationBlock: selector not found");
+        return;
+    }
+
+    // The block deliberately takes no parameters even though the framework
+    // passes a status pointer — ignoring trailing arguments is safe under
+    // the C calling convention, and re-querying via fetchStatus: avoids
+    // depending on the struct layout here. May be invoked on any thread.
+    dispatch_block_t block = nil;
+    if (handler) {
+        block = ^{
+            dispatch_async(dispatch_get_main_queue(), ^{
+                void (^h)(void) = statusChangeHandler;
+                if (h) h();
+            });
+        };
+    }
+
+    void (*setBlock)(id, SEL, id) = (void (*)(id, SEL, id))objc_msgSend;
+    setBlock(client, sel, block);
 }
 
 @end
