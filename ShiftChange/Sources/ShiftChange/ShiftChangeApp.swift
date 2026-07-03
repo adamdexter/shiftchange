@@ -29,7 +29,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         NSApplication.shared.setActivationPolicy(.accessory)
 
         // Set the app icon (for window title bar, About, etc.)
-        if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
+        if let iconURL = AppResources.bundle.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             let size: CGFloat = 1024
             let padding: CGFloat = size * 0.10
@@ -391,7 +391,7 @@ extension AppDelegate: NSWindowDelegate {
 struct AboutView: View {
     static let appVersion: String = {
         // Read from the bundled VERSION file (single source of truth)
-        if let url = Bundle.module.url(forResource: "VERSION", withExtension: nil),
+        if let url = AppResources.bundle.url(forResource: "VERSION", withExtension: nil),
            let contents = try? String(contentsOf: url, encoding: .utf8) {
             return contents.trimmingCharacters(in: .whitespacesAndNewlines)
         }
@@ -405,7 +405,7 @@ struct AboutView: View {
     var body: some View {
         VStack(spacing: 16) {
             // App icon
-            if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
+            if let iconURL = AppResources.bundle.url(forResource: "AppIcon", withExtension: "icns"),
                let icon = NSImage(contentsOf: iconURL) {
                 Image(nsImage: icon)
                     .resizable()
