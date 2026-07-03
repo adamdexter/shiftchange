@@ -94,4 +94,36 @@ typedef struct {
     return status.mode != 0;
 }
 
+static void (^statusChangeHandler)(void) = nil;
+
++ (void)setStatusChangeHandler:(void (^ _Nullable)(void))handler {
+    statusChangeHandler = [handler copy];
+
+    id client = [self sharedClient];
+    if (!client) return;
+
+    SEL sel = NSSelectorFromString(@"setStatusNotificationBlock:");
+    if (![client respondsToSelector:sel]) {
+        NSLog(@"[ShiftChange] setStatusNotificationBlock: selector not found");
+        return;
+    }
+
+    // The block deliberately takes no parameters even though the framework
+    // passes a status pointer — ignoring trailing arguments is safe under
+    // the C calling convention, and re-querying via fetchStatus: avoids
+    // depending on the struct layout here. May be invoked on any thread.
+    dispatch_block_t block = nil;
+    if (handler) {
+        block = ^{
+            dispatch_async(dispatch_get_main_queue(), ^{
+                void (^h)(void) = statusChangeHandler;
+                if (h) h();
+            });
+        };
+    }
+
+    void (*setBlock)(id, SEL, id) = (void (*)(id, SEL, id))objc_msgSend;
+    setBlock(client, sel, block);
+}
+
 @end

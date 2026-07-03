@@ -20,6 +20,11 @@ NS_ASSUME_NONNULL_BEGIN
 /// Returns YES if Night Shift has a schedule configured (sun-based or custom).
 + (BOOL)isNightShiftScheduled;
 
+/// Registers a handler invoked on the main queue whenever Night Shift status
+/// changes (schedule triggers, System Settings, Control Center, or our own
+/// setNightShiftEnabled: calls). Pass nil to remove the handler.
++ (void)setStatusChangeHandler:(void (^ _Nullable)(void))handler;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -19,6 +19,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     // Menu items that need updating
     private var statusMenuItem: NSMenuItem!
     private var activeAppMenuItem: NSMenuItem!
+    private var toggleNightShiftMenuItem: NSMenuItem!
     private var launchAtLoginMenuItem: NSMenuItem!
 
     private static let hasLaunchedKey = "hasLaunchedBefore"
@@ -46,6 +47,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Start monitoring
         focusMonitor.start(excludeList: excludeList)
         focusMonitor.onStatusChange = { [weak self] in
+            self?.updateMenuStatus()
+        }
+
+        // React to Night Shift changes from outside (schedule triggers,
+        // System Settings) — keeps the override honest while an excluded
+        // app is focused and keeps the menu status fresh
+        NightShiftManager.shared.startObservingStatusChanges { [weak self] in
             self?.updateMenuStatus()
         }
 
@@ -137,6 +145,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         statusMenu.addItem(.separator())
 
+        // Global Night Shift toggle — same as the System Settings toggle
+        toggleNightShiftMenuItem = NSMenuItem(title: "Turn Off Night Shift", action: #selector(toggleNightShiftGlobally), keyEquivalent: "")
+        toggleNightShiftMenuItem.target = self
+        statusMenu.addItem(toggleNightShiftMenuItem)
+
+        statusMenu.addItem(.separator())
+
         // Settings
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
@@ -155,6 +170,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         quitItem.target = self
         statusMenu.addItem(quitItem)
 
+        statusMenu.delegate = self
         statusItem.menu = statusMenu
 
         updateMenuStatus()
@@ -163,8 +179,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private func statusTitle() -> String {
         if focusMonitor.nightShiftOverridden {
             return "Night Shift: Disabled (excluded app)"
+        } else if NightShiftManager.shared.isEnabled {
+            return "Night Shift: On"
         } else {
-            return "Night Shift: Following schedule"
+            return "Night Shift: Off"
         }
     }
 
@@ -172,6 +190,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         guard let statusMenuItem, let activeAppMenuItem, let button = statusItem?.button else { return }
 
         statusMenuItem.title = statusTitle()
+
+        toggleNightShiftMenuItem?.title = NightShiftManager.shared.effectiveEnabled
+            ? "Turn Off Night Shift"
+            : "Turn On Night Shift"
 
         if !focusMonitor.currentAppName.isEmpty {
             activeAppMenuItem.title = "Active: \(focusMonitor.currentAppName)"
@@ -297,6 +319,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
+    @objc private func toggleNightShiftGlobally() {
+        let nightShift = NightShiftManager.shared
+        nightShift.setGlobalEnabled(!nightShift.effectiveEnabled)
+        updateMenuStatus()
+    }
+
     @objc private func toggleLaunchAtLogin() {
         let newState = !isLaunchAtLoginEnabled()
         setLaunchAtLogin(enabled: newState)
@@ -330,6 +358,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 print("Failed to \(enabled ? "enable" : "disable") launch at login: \(error)")
             }
         }
+    }
+}
+
+// MARK: - Menu Delegate
+
+extension AppDelegate: NSMenuDelegate {
+    func menuWillOpen(_ menu: NSMenu) {
+        // Refresh right before display — Night Shift state can change outside
+        // our control (schedule triggers, System Settings, Control Center)
+        updateMenuStatus()
     }
 }
 
