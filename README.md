@@ -74,6 +74,7 @@ That's it. Set it and forget it.
 - **Launch at Login** — start automatically so you never have to think about it
 - **Lightweight** — native Swift, no Electron, no background web processes
 - **Privacy-respecting** — no network calls, no analytics, no data collection
+- **Signed & notarized** — releases are Developer ID signed and notarized by Apple, so no Gatekeeper warnings
 
 ## Installation
 
@@ -162,7 +163,9 @@ Anyone who uses Night Shift **and** works with color-sensitive applications:
 
 ## How It Works (Technical)
 
-ShiftChange uses Apple's private `CoreBrightness` framework (`CBBlueLightClient`) to control Night Shift programmatically. It monitors `NSWorkspace.didActivateApplicationNotification` to detect app focus changes and toggles Night Shift accordingly.
+ShiftChange uses Apple's private `CoreBrightness` framework (`CBBlueLightClient`) to control Night Shift programmatically. It monitors `NSWorkspace.didActivateApplicationNotification` to detect app focus changes, and subscribes to Night Shift status notifications so schedule triggers and System Settings changes are handled even while a color-critical app is in focus.
+
+On macOS versions where the "Auto" appearance setting is coupled to Night Shift (e.g. Sonoma), ShiftChange also guards your Light/Dark theme so its Night Shift toggles never flip it.
 
 The app runs as a menu bar accessory (`LSUIElement`) with no Dock icon during normal operation. The settings window activates the Dock icon temporarily for a natural macOS experience.
 
