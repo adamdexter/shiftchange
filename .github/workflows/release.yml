@@ -8,7 +8,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'ShiftChange/Sources/NightShiftToggle/Resources/VERSION'
+      - 'ShiftChange/Sources/ShiftChange/Resources/VERSION'
       - '.github/workflows/release.yml'
   workflow_dispatch:
     inputs:
@@ -29,7 +29,7 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          FILE_VERSION=$(tr -d '[:space:]' < ShiftChange/Sources/NightShiftToggle/Resources/VERSION)
+          FILE_VERSION=$(tr -d '[:space:]' < ShiftChange/Sources/ShiftChange/Resources/VERSION)
           REQUESTED="${{ github.event.inputs.version }}"
           if [ -n "$REQUESTED" ] && [ "$REQUESTED" != "$FILE_VERSION" ]; then
             echo "::error::Requested version $REQUESTED does not match the VERSION file ($FILE_VERSION). The About screen reads the VERSION file, so these must match."

@@ -7,7 +7,7 @@ BUNDLE_ID="net.adamdexter.ShiftChange"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PKG_DIR="${PROJECT_DIR}/ShiftChange"
-VERSION_FILE="${PKG_DIR}/Sources/NightShiftToggle/Resources/VERSION"
+VERSION_FILE="${PKG_DIR}/Sources/ShiftChange/Resources/VERSION"
 if [ -f "$VERSION_FILE" ]; then
     DEFAULT_VERSION=$(tr -d '[:space:]' < "$VERSION_FILE")
 else
@@ -32,8 +32,18 @@ if [ ! -f "$BINARY" ]; then
     exit 1
 fi
 
-# Find the resource bundle
-RESOURCE_BUNDLE=$(find "${PKG_DIR}/.build/release" -name "ShiftChange_ShiftChange.bundle" -maxdepth 1 | head -1)
+# The resource bundle. Hard-fail if missing — without it the packaged app
+# crashes at launch (Bundle.module fatalError). v1.0.0–v1.1.2 shipped broken
+# this way: the bundle was named NightShiftToggle_ShiftChange.bundle (from
+# the old package name) AND `find` on the .build/release symlink couldn't
+# descend into it, so the copy below was silently skipped.
+RESOURCE_BUNDLE="${PKG_DIR}/.build/release/ShiftChange_ShiftChange.bundle"
+if [ ! -d "$RESOURCE_BUNDLE" ]; then
+    echo "ERROR: ${RESOURCE_BUNDLE} not found."
+    echo "       The app would crash on launch without it. Did the package"
+    echo "       or target name in Package.swift change?"
+    exit 1
+fi
 
 # ── 2. Create .app bundle ─────────────────────────────────────────
 echo "==> Creating ${APP_NAME}.app bundle..."
@@ -44,10 +54,9 @@ mkdir -p "${APP_BUNDLE}/Contents/Resources"
 # Copy binary
 cp "$BINARY" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 
-# Copy resource bundle (contains AppIcon.icns etc.)
-if [ -n "$RESOURCE_BUNDLE" ] && [ -d "$RESOURCE_BUNDLE" ]; then
-    cp -R "$RESOURCE_BUNDLE" "${APP_BUNDLE}/Contents/Resources/"
-fi
+# Copy resource bundle (contains AppIcon.icns and VERSION; existence
+# guaranteed by the guard above)
+cp -R "$RESOURCE_BUNDLE" "${APP_BUNDLE}/Contents/Resources/"
 
 # Copy icon
 cp "${PKG_DIR}/shiftchange.icns" "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"

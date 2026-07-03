@@ -2,7 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "NightShiftToggle",
+    // Package name must stay "ShiftChange": SwiftPM derives the resource
+    // bundle name (ShiftChange_ShiftChange.bundle) from it, and both
+    // Bundle.module and create-dmg.sh depend on that. A mismatch makes the
+    // packaged app crash at launch (this shipped broken in v1.0.0–v1.1.2).
+    name: "ShiftChange",
     platforms: [.macOS(.v13)],
     targets: [
         .target(
@@ -16,7 +20,7 @@ let package = Package(
         .executableTarget(
             name: "ShiftChange",
             dependencies: ["CBlueLightBridge"],
-            path: "Sources/NightShiftToggle",
+            path: "Sources/ShiftChange",
             resources: [
                 .process("Resources")
             ]
